@@ -153,3 +153,5 @@ GitHub latest, три размера/SHA-256, зеркало и ZIP провер
 - Legacy для старых клиентов и восстановления: `ClipShot-Setup-0.7.5.exe`, 88313446 байт, SHA-256 `0ed79f9b7ba792cd959af007434f9f3582e6d968cbb106bb4d09fd285916f3fb`.
 
 Прямые ссылки зеркала: https://bot.data-clouds.ru/clipshot/v0.7.5/ClipShot-Win10-Setup-0.7.5.exe и https://bot.data-clouds.ru/clipshot/v0.7.5/ClipShot-Win11-Setup-0.7.5.exe. Постоянная ссылка восстановления: https://bot.data-clouds.ru/clipshot/ClipShot-Latest.zip. Внешний HTTPS Range (HTTP206, точный Content-Range) всех трёх пакетов — PASS. Изменений VPN/маршрутов/firewall/SSH/nginx не было.
+
+Полная внешняя HTTPS-загрузка Win11-пакета с российского зеркала — PASS: 88317376 байт за 34,71 с, SHA-256 9195a6002ffaf3131c489c04a2175c1a670ea17b69c1bcd44b5b65bb6ffa83b9 совпал. Это измерение конкретного проверочного маршрута, скорость сети тестеров не утверждается.
