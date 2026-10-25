@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Windowing;
 using Windows.Graphics;
 namespace ClipShot;
 public sealed partial class MainWindow
@@ -11,6 +12,24 @@ public sealed partial class MainWindow
     private bool panelFading,panelFadeReady;
     private long panelFadeStarted;
     private nint panelOriginalStyle;
+    private bool AlwaysOnTop=>store.Get("alwaysontop","0")=="1";
+    private void ApplyAlwaysOnTop()
+    {
+        // Сначала снимаем анимационный WS_EX_LAYERED: восстановление старого
+        // extended style после смены presenter могло бы отменить TOPMOST.
+        CancelPanelFade();
+        if(AppWindow.Presenter is OverlappedPresenter presenter)presenter.IsAlwaysOnTop=AlwaysOnTop;
+    }
+    private void AlwaysOnTopClick(object sender,RoutedEventArgs e)
+    {
+        if(exiting||sender is not ToggleMenuFlyoutItem item)return;
+        store.Set("alwaysontop",item.IsChecked?"1":"0");ApplyAlwaysOnTop();
+    }
+    private void ToggleAlwaysOnTop()
+    {
+        if(exiting)return;
+        store.Set("alwaysontop",AlwaysOnTop?"0":"1");ApplyAlwaysOnTop();ConfigureWindowContextMenu();
+    }
     private void FitCompactPanel(List<ClipGroup> groups)
     {
         int count=groups.Count(g=>g.Clips.Count>0);
@@ -29,7 +48,7 @@ public sealed partial class MainWindow
         menu.Opened+=(_,_)=>{openMenus++;CancelPanelFade();};
         menu.Closed+=(_,_)=>openMenus=Math.Max(0,openMenus-1);
     }
-    private bool CanDismissPanel=>!exiting&&AppWindow.IsVisible&&!dialogOpen&&!takingScreenshot&&!windowResizing&&editor is null&&openMenus==0;
+    private bool CanDismissPanel=>!exiting&&!AlwaysOnTop&&AppWindow.IsVisible&&!dialogOpen&&!takingScreenshot&&!windowResizing&&editor is null&&openMenus==0;
     private bool ExternalForeground()
     {
         nint foreground=Native.GetForegroundWindow();

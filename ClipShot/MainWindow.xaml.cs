@@ -59,6 +59,7 @@ public sealed partial class MainWindow : Window
         if(store.Get("compactpanel","0")!="1")store.SetMany(new Dictionary<string,string>{{"compactpanel","1"},{"width","260"},{"height","220"},{"panelautofit","1"}});
         AppWindow.Resize(new SizeInt32(AppSettings.WindowWidth(store.Get("width","260")),AppSettings.WindowHeight(store.Get("height","220"))));
         if(AppWindow.Presenter is OverlappedPresenter presenter){presenter.SetBorderAndTitleBar(true,false);presenter.IsMaximizable=false;presenter.IsResizable=true;}
+        ApplyAlwaysOnTop();
         procedure=WindowMessage;
         previous=Native.SetWindowLongPtr(hwnd,-4,Marshal.GetFunctionPointerForDelegate(procedure));
         if(!isolated)
@@ -135,10 +136,10 @@ public sealed partial class MainWindow : Window
             if(mouse==0x0205)
             {
                 Native.GetCursorPos(out var p);Native.SetForegroundWindow(hwnd);
-                nint menu=Native.CreatePopupMenu();Native.AppendMenu(menu,0,1,T("Открыть историю"));Native.AppendMenu(menu,0,4,T("Снимок выделенной области"));if(microphoneStarted)Native.AppendMenu(menu,0,5,MicrophoneText(microphoneResult.State)+" · "+T("Переключить"));Native.AppendMenu(menu,0,6,T("Проверить обновление"));Native.AppendMenu(menu,0,2,T("Настройки"));Native.AppendMenu(menu,0,3,T("Выход"));
+                nint menu=Native.CreatePopupMenu();Native.AppendMenu(menu,0,1,T("Открыть историю"));Native.AppendMenu(menu,0,4,T("Снимок выделенной области"));if(microphoneStarted)Native.AppendMenu(menu,0,5,MicrophoneText(microphoneResult.State)+" · "+T("Переключить"));Native.AppendMenu(menu,0,6,T("Проверить обновление"));Native.AppendMenu(menu,AlwaysOnTop?8u:0u,7,T("Всегда поверх окон"));Native.AppendMenu(menu,0,2,T("Настройки"));Native.AppendMenu(menu,0,3,T("Выход"));
                 int command;openMenus++;CancelPanelFade();
                 try{command=Native.TrackPopupMenu(menu,0x100,p.X,p.Y,0,hwnd,0);}finally{Native.DestroyMenu(menu);openMenus--;}
-                DispatcherQueue.TryEnqueue(()=>{if(command==1)ShowNearCursor();if(command==2){ShowNearCursor();SettingsClick(this,new());}if(command==4)TakeScreenshot();if(command==5)RefreshMicrophone(true);if(command==6)_=CheckUpdatesFromTray();if(command==3)Quit();});
+                DispatcherQueue.TryEnqueue(()=>{if(command==1)ShowNearCursor();if(command==2){ShowNearCursor();SettingsClick(this,new());}if(command==4)TakeScreenshot();if(command==5)RefreshMicrophone(true);if(command==6)_=CheckUpdatesFromTray();if(command==7)ToggleAlwaysOnTop();if(command==3)Quit();});
             }
             return 0;
         }

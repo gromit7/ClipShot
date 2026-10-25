@@ -8,6 +8,9 @@ $project=[xml](Get-Content -LiteralPath (Join-Path $repo 'ClipShot/ClipShot.cspr
 $version=[string]$project.Project.PropertyGroup.Version
 $tag="v$version"
 $repository='gromit7/ClipShot'
+if(-not $env:CLIPSHOT_MIRROR_EXECUTOR -or -not(Test-Path -LiteralPath $env:CLIPSHOT_MIRROR_EXECUTOR -PathType Leaf)){
+    throw 'Для выпуска настройте CLIPSHOT_MIRROR_EXECUTOR: приватный исполнитель публикации российского зеркала.'
+}
 $existing=& gh release view $tag --repo $repository --json tagName 2>$null
 if($LASTEXITCODE -eq 0){throw 'Выпущенные версии неизменяемы. Увеличьте версию.'}
 # Рабочий дистрибутив на D остаётся прежним до подтверждения GitHub.
@@ -42,6 +45,9 @@ $latest=GitHub -Arguments @('api',"repos/$repository/releases/latest") | Convert
 if($latest.tag_name -ne $tag){throw 'Лента автообновления не указывает на новый выпуск.'}
 $published=$latest.assets | Where-Object name -eq "ClipShot-Setup-$version.exe"
 if($published.digest -ne "sha256:$hash"){throw 'Контрольная сумма в ленте не совпадает.'}
+# Ленту переключаем только после проверки российского зеркала. При ошибке
+# опубликованный GitHub-пакет сохраняется; продолжение выполняется штатным publisher.
+& (Join-Path $PSScriptRoot 'Publish-Mirror.ps1') -Version $version
 & (Join-Path $PSScriptRoot 'Publish-UpdateFeed.ps1') -ExpectedVersion $version -Publish
 & (Join-Path $PSScriptRoot 'Publish-Installer.ps1') -Setup $setup
 Write-Output "Выпущен ClipShot ${version}: GitHub, автообновление и локальный установщик совпадают."

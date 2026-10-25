@@ -10,6 +10,8 @@ public sealed partial class MainWindow
     {
         var menu=new MenuFlyout();TrackMenu(menu);
         void Item(string text,Action action){var item=new MenuFlyoutItem{Text=T(text)};item.Click+=(_,_)=>action();menu.Items.Add(item);}
+        var alwaysOnTop=new ToggleMenuFlyoutItem{Text=T("Всегда поверх окон"),IsChecked=AlwaysOnTop,Tag="alwaysontop"};
+        alwaysOnTop.Click+=AlwaysOnTopClick;menu.Items.Add(alwaysOnTop);menu.Items.Add(new MenuFlyoutSeparator());
         Item("Настройки",()=>SettingsClick(this,new()));Item("Справка",()=>HelpClick(this,new()));menu.Items.Add(new MenuFlyoutSeparator());
         Item("Скрыть",Hide);Item("Выход",Quit);Root.ContextFlyout=menu;
     }

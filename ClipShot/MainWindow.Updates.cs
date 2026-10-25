@@ -13,7 +13,7 @@ public sealed partial class MainWindow
     private AppUpdate? preparedUpdate;
     private DateTime nextUpdateAttempt;
     private string? preparedInstaller;
-    private bool startupUpdatePending,updateLaunchRequested,checkAfterLaunch=true;
+    private bool startupUpdatePending,updateLaunchRequested,manualUpdateRequested,checkAfterLaunch=true;
     private readonly DateTime startupInstallUntil=DateTime.UtcNow.AddMinutes(2);
     private bool CanStartupInstall=>!isolated&&!exiting&&!AppWindow.IsVisible&&!UpdateOperationBusy&&DateTime.UtcNow<=startupInstallUntil;
     private string updateDownloadText="";
@@ -21,8 +21,8 @@ public sealed partial class MainWindow
     private bool AutomaticUpdates=>true;
     private bool UpdateOperationBusy=>dialogOpen||takingScreenshot||editor is not null||capturing||captureAgain;
     private bool CanAutoDownload()=>!isolated&&!exiting&&AutomaticUpdates&&!UpdateOperationBusy;
-    // Guarded UpdateQuit нужен и явному запросу из трея, когда автообновление выключено.
-    // Ни один запрос не закрывает открытое окно/редактор и не прерывает работу за ПК.
+    // Фоновая установка использует guarded UpdateQuit и ждёт простоя.
+    // Явная ручная команда разрешает перезапуск, но также защищает открытый редактор.
     private bool CanAutoInstall()=>!exiting&&UpdateIdlePolicy.CanInstall(isolated,
         AutomaticUpdates||(updateInstallRequested&&!requestedAutomatically),
         AppWindow.IsVisible,UpdateOperationBusy,UserInactivity.Read());
@@ -68,7 +68,14 @@ public sealed partial class MainWindow
     {
         activeDialog?.Hide();
         for(int attempt=0;attempt<40&&dialogOpen&&!exiting;attempt++)await Task.Delay(50);
-        if(!dialogOpen&&!exiting){if(updateDownloading){ShowNearCursor();return;}if(preparedInstaller is not null){await OfferImmediateUpdate();return;}await CheckUpdates(true);}
+        if(!dialogOpen&&!exiting)
+        {
+            manualUpdateRequested=true;
+            if(updateDownloading){ShowNearCursor();return;}
+            if(updateChecking)return; // Присоединяемся к текущей проверке, не создавая второй GET.
+            if(preparedInstaller is not null&&updateMetadataValid){manualUpdateRequested=false;await InstallPreparedNow();return;}
+            await CheckUpdates(true);
+        }
     }
     private Task OfferImmediateUpdate()
     {
@@ -96,8 +103,13 @@ public sealed partial class MainWindow
     private async void ManualUpdateClick(object sender,RoutedEventArgs e)
     {
         if(updateLaunchRequested||updateInstalling||updateDownloading||exiting)return;
-        if(preparedInstaller is null){await CheckUpdatesFromTray();return;}
-        updateLaunchRequested=true;ShowUpdateOffer();
+        if(preparedInstaller is null||!updateMetadataValid){await CheckUpdatesFromTray();return;}
+        await InstallPreparedNow();
+    }
+    private async Task InstallPreparedNow()
+    {
+        if(updateLaunchRequested||updateInstalling||exiting||preparedInstaller is null)return;
+        requestedAutomatically=false;updateLaunchRequested=true;ShowUpdateOffer();
         try
         {
             activeDialog?.Hide();
@@ -124,16 +136,17 @@ public sealed partial class MainWindow
             {
                 preparedUpdate=null;preparedInstaller=null;updateInstallRequested=false;ClearPendingUpdate();
             }
-            if(manual)
+            if(manual||manualUpdateRequested)
             {
                 if(availableUpdate is null)ShowUpdateMessage("Обновлений нет");
                 else download=true;
             }
         }
-        catch(OperationCanceledException){if(!exiting&&manual)ShowUpdateMessage("Не удалось проверить обновления","Повторите позже.");}
-        catch{if(!exiting&&manual)ShowUpdateMessage("Не удалось проверить обновления","Повторите позже.");}
+        catch(OperationCanceledException){if(!exiting&&(manual||manualUpdateRequested))ShowUpdateMessage("Не удалось проверить обновления","Повторите позже.");}
+        catch{if(!exiting&&(manual||manualUpdateRequested))ShowUpdateMessage("Не удалось проверить обновления","Повторите позже.");}
         finally{updateChecking=false;ShowUpdateOffer();}
-        if(download&&!exiting)await DownloadUpdate(false);
+        if(download&&updateMetadataValid&&!exiting)await DownloadUpdate(false);
+        else if(!updateDownloading)manualUpdateRequested=false;
     }
     // Совместимость с вызовами из других partial-файлов. В основном окне обновления не показываем.
 
@@ -155,6 +168,7 @@ public sealed partial class MainWindow
         if(preparedInstaller is not null)
         {
             requestedAutomatically=automatic;updateInstallRequested=true;
+            if(manualUpdateRequested){manualUpdateRequested=false;await InstallPreparedNow();return;}
             TryInstallUpdate();
             if(!automatic&&!updateInstalling)await OfferImmediateUpdate();
             return;
@@ -173,9 +187,17 @@ public sealed partial class MainWindow
         catch
         {
             nextUpdateAttempt=DateTime.UtcNow.AddMinutes(30);updateInstallRequested=false;
-            if(!exiting&&!automatic)ShowUpdateMessage("Не удалось скачать обновление","Повторите позже.");
+            if(!exiting&&(!automatic||manualUpdateRequested))ShowUpdateMessage("Не удалось скачать обновление","Повторите позже.");
         }
-        finally{updateDownloading=false;ShowUpdateOffer();}
+        finally
+        {
+            updateDownloading=false;ShowUpdateOffer();
+            // Ручная проверка — одно действие: настройки уже закрыты, проверенный пакет
+            // устанавливаем сразу. Открытый редактор остаётся защищён InstallPreparedNow.
+            bool install=manualUpdateRequested&&preparedInstaller is not null&&updateMetadataValid;
+            manualUpdateRequested=false;
+            if(install&&!exiting)await InstallPreparedNow();
+        }
     }
     private void TryInstallUpdate(bool immediate=false,bool startup=false)
     {
@@ -184,8 +206,8 @@ public sealed partial class MainWindow
         updateApplying=true;
         try
         {
-            // Повторная сверка с последней лентой без HTTP: запросы только в двух будних
-            // слотах или по явной команде. Сам пакет перед запуском повторно проверяем по SHA.
+            // Повторная сверка с уже полученной лентой без лишнего HTTP.
+            // Сам пакет перед запуском повторно проверяем по SHA.
             if(availableUpdate!=preparedUpdate)
             {
                 preparedInstaller=null;preparedUpdate=null;updateInstallRequested=false;return;
