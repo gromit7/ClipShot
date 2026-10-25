@@ -1,8 +1,5 @@
 ﻿using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 namespace ClipShot;
 public sealed partial class MainWindow
@@ -11,9 +8,8 @@ public sealed partial class MainWindow
     private readonly DispatcherTimer microphoneTimer=new(){Interval=TimeSpan.FromMilliseconds(750)};
     private IReadOnlyList<MicrophoneDevice> microphoneDevices=[];
     private MicrophoneResult microphoneResult=new(MicrophoneState.Unavailable,[],true);
-    private Native.NotifyIcon microphoneTray;
     private MicrophoneMouse? microphoneMouse;private MicrophoneNotice? microphoneNotice;
-    private bool microphoneBusy,microphoneStarted,microphoneTrayReady,microphonePending;private int microphoneGeneration;private string microphoneSignature="";
+    private bool microphoneBusy,microphoneStarted,microphonePending;private int microphoneGeneration;
     private string[] MicrophoneIds(){try{return JsonSerializer.Deserialize<string[]>(store.Get("micids","[]"))??[];}catch{return [];}}
     private void StartMicrophone()
     {
@@ -53,36 +49,26 @@ public sealed partial class MainWindow
                 microphoneNotice=new(MicrophoneText(microphoneResult.State),toggle&&!microphoneResult.Success?T("Не все микрофоны удалось переключить. Проверьте подключение."):string.Join(", ",microphoneResult.Devices.Select(d=>d.Name)),microphoneResult.State);
             }
         }
-        catch{if(!exiting){microphoneResult=new(MicrophoneState.Unavailable,[],false);UpdateMicrophoneTray();}}
+        catch{if(!exiting&&microphoneStarted&&generation==microphoneGeneration){microphoneResult=new(MicrophoneState.Unavailable,[],false);UpdateMicrophoneTray();}}
         finally{microphoneBusy=false;if(microphonePending&&!exiting){microphonePending=false;RefreshMicrophone(true);}}
     }
     private string MicrophoneText(MicrophoneState state)=>T(state switch
     {MicrophoneState.Enabled=>"Микрофон включён",MicrophoneState.Muted=>"Микрофон выключен",MicrophoneState.Mixed=>"Часть микрофонов включена",_=>"Микрофон недоступен"});
+    private string sharedTraySignature="";
+    private string TraySignature=>$"{microphoneStarted}/{microphoneResult.State}/{TrayTip}";
     private void UpdateMicrophoneTray()
     {
-        string tip=$"ClipShot · {MicrophoneText(microphoneResult.State)} · {string.Join(", ",microphoneResult.Devices.Select(d=>d.Name))}";
-        if(tip.Length>127)tip=tip[..126]+"…";
-        string signature=$"{microphoneResult.State}/{tip}";if(microphoneTrayReady&&signature==microphoneSignature)return;
-        nint icon=MicrophoneIcon(microphoneResult.State),old=microphoneTray.Icon;
-        microphoneTray=new(){Size=(uint)Marshal.SizeOf<Native.NotifyIcon>(),Hwnd=hwnd,Id=2,Flags=7,Callback=0x8002,Icon=icon,Tip=tip,Info="",InfoTitle=""};
-        bool ok=Native.Shell_NotifyIcon(microphoneTrayReady?1u:0u,ref microphoneTray);microphoneTrayReady=ok;microphoneSignature=signature;
-        if(old!=0)Native.DestroyIcon(old);
+        if(!isolated&&!exiting&&(!trayReady||sharedTraySignature!=TraySignature))CreateTray();
     }
     private static nint MicrophoneIcon(MicrophoneState state)
     {
-        using var bitmap=new Bitmap(32,32);using var graphics=Graphics.FromImage(bitmap);graphics.SmoothingMode=SmoothingMode.AntiAlias;
-        var color=state switch{MicrophoneState.Enabled=>Color.FromArgb(37,172,104),MicrophoneState.Muted=>Color.FromArgb(230,71,83),MicrophoneState.Mixed=>Color.FromArgb(235,172,38),_=>Color.Gray};
-        using var brush=new SolidBrush(color);graphics.FillEllipse(brush,0,0,31,31);using var pen=new Pen(Color.White,2.5f){StartCap=LineCap.Round,EndCap=LineCap.Round};
-        graphics.DrawLine(pen,16,8,16,16);graphics.DrawArc(pen,10,10,12,12,0,180);graphics.DrawLine(pen,16,22,16,25);graphics.DrawLine(pen,12,25,20,25);
-        if(state==MicrophoneState.Muted)graphics.DrawLine(pen,7,7,25,25);
-        if(state==MicrophoneState.Unavailable){using var font=new Font("Segoe UI",12,FontStyle.Bold);graphics.DrawString("?",font,Brushes.White,20,0);}
+        using var bitmap=TrayIconRenderer.Render(Path.Combine(AppContext.BaseDirectory,"Assets","ClipShot.ico"),state);
         return bitmap.GetHicon();
     }
     private void StopMicrophone()
     {
         microphoneGeneration++;microphonePending=false;microphoneStarted=false;microphoneTimer.Stop();Native.UnregisterHotKey(hwnd,3);microphoneMouse?.Dispose();microphoneMouse=null;microphoneNotice?.Close();microphoneNotice=null;
-        if(microphoneTrayReady)Native.Shell_NotifyIcon(2,ref microphoneTray);microphoneTrayReady=false;
-        if(microphoneTray.Icon!=0){Native.DestroyIcon(microphoneTray.Icon);microphoneTray.Icon=0;}
+        if(!isolated&&!exiting&&trayReady)CreateTray();
     }
     private Action MicrophoneSettings(StackPanel panel)
     {

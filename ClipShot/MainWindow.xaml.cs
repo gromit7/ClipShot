@@ -93,9 +93,11 @@ public sealed partial class MainWindow : Window
     }
     private void CreateTray()
     {
-        if(tray.Icon!=0)Native.DestroyIcon(tray.Icon);
-        tray=new(){Size=(uint)Marshal.SizeOf<Native.NotifyIcon>(),Hwnd=hwnd,Id=1,Flags=7,Callback=0x8001,Icon=Native.LoadImage(0,Path.Combine(AppContext.BaseDirectory,"Assets","ClipShot.ico"),1,32,32,0x10),Tip=TrayTip,Info="",InfoTitle=""};
-        trayReady=tray.Icon!=0&&Native.Shell_NotifyIcon(0,ref tray);
+        nint old=tray.Icon;
+        tray=new(){Size=(uint)Marshal.SizeOf<Native.NotifyIcon>(),Hwnd=hwnd,Id=1,Flags=7,Callback=0x8001,Icon=microphoneStarted?MicrophoneIcon(microphoneResult.State):Native.LoadImage(0,Path.Combine(AppContext.BaseDirectory,"Assets","ClipShot.ico"),1,32,32,0x10),Tip=TrayTip,Info="",InfoTitle=""};
+        bool ok=tray.Icon!=0&&Native.Shell_NotifyIcon(trayReady?1u:0u,ref tray);
+        if(!ok&&tray.Icon!=0)ok=Native.Shell_NotifyIcon(0,ref tray);
+        trayReady=ok;sharedTraySignature=TraySignature;if(old!=0)Native.DestroyIcon(old);
         if(!trayReady)Status.Text=T("Не удалось добавить значок в трей. Перезапустите приложение.");
     }
     private nint WindowMessage(nint h,uint msg,nint w,nint l)
@@ -103,9 +105,8 @@ public sealed partial class MainWindow : Window
         if(msg==0x0112&&((long)w&0xFFF0)==0xF020){DispatcherQueue.TryEnqueue(Hide);return 0;}
         if(msg==App.ShowMessage){DispatcherQueue.TryEnqueue(ShowNearCursor);return 0;}
         if(msg==App.QuitMessage){DispatcherQueue.TryEnqueue(Quit);return 0;}
-        if(msg==taskbarCreated&&(!isolated||shellTest)){DispatcherQueue.TryEnqueue(()=>{CreateTray();microphoneTrayReady=false;microphoneSignature="";if(microphoneStarted)UpdateMicrophoneTray();});return 0;}
+        if(msg==taskbarCreated&&(!isolated||shellTest)){DispatcherQueue.TryEnqueue(()=>{trayReady=false;CreateTray();});return 0;}
         if(msg==App.MicrophoneMessage){DispatcherQueue.TryEnqueue(()=>RefreshMicrophone(true));return 0;}
-        if(msg==0x8002){if((int)l==0x0202)DispatcherQueue.TryEnqueue(()=>RefreshMicrophone(true));if((int)l==0x0205)DispatcherQueue.TryEnqueue(()=>{ShowNearCursor();SettingsClick(this,new());});return 0;}
         if(msg==0x031D && !isolated) { DispatcherQueue.TryEnqueue(()=>Capture()); }
         if(msg==0x0312)
         {
@@ -121,9 +122,9 @@ public sealed partial class MainWindow : Window
             if(mouse==0x0205)
             {
                 Native.GetCursorPos(out var p);Native.SetForegroundWindow(hwnd);
-                nint menu=Native.CreatePopupMenu();Native.AppendMenu(menu,0,1,T("Открыть историю"));Native.AppendMenu(menu,0,4,T("Снимок выделенной области"));Native.AppendMenu(menu,0,2,T("Настройки"));Native.AppendMenu(menu,0,3,T("Выход"));
+                nint menu=Native.CreatePopupMenu();Native.AppendMenu(menu,0,1,T("Открыть историю"));Native.AppendMenu(menu,0,4,T("Снимок выделенной области"));if(microphoneStarted)Native.AppendMenu(menu,0,5,MicrophoneText(microphoneResult.State)+" · "+T("Переключить"));Native.AppendMenu(menu,0,2,T("Настройки"));Native.AppendMenu(menu,0,3,T("Выход"));
                 int command=Native.TrackPopupMenu(menu,0x100,p.X,p.Y,0,hwnd,0);Native.DestroyMenu(menu);
-                DispatcherQueue.TryEnqueue(()=>{if(command==1)ShowNearCursor();if(command==2){ShowNearCursor();SettingsClick(this,new());}if(command==4)TakeScreenshot();if(command==3)Quit();});
+                DispatcherQueue.TryEnqueue(()=>{if(command==1)ShowNearCursor();if(command==2){ShowNearCursor();SettingsClick(this,new());}if(command==4)TakeScreenshot();if(command==5)RefreshMicrophone(true);if(command==3)Quit();});
             }
             return 0;
         }
@@ -454,6 +455,12 @@ public sealed partial class MainWindow : Window
         {await RunCaptureChecks(Environment.GetCommandLineArgs().Contains("--capture-demo"));return;}
         if(Environment.GetCommandLineArgs().Contains("--demo"))
         {
+            if(Environment.GetCommandLineArgs().Contains("--microphone-preview"))
+            {
+                var stateArg=Environment.GetCommandLineArgs().FirstOrDefault(a=>a.StartsWith("--microphone-state="));
+                var state=stateArg is not null&&Enum.TryParse<MicrophoneState>(stateArg[19..],out var parsed)?parsed:MicrophoneState.Enabled;
+                microphoneNotice=new MicrophoneNotice(MicrophoneText(state),"Тестовый USB-микрофон",state,true);
+            }
             if(Environment.GetCommandLineArgs().Contains("--preview"))
             {
                 var t=new DispatcherTimer{Interval=TimeSpan.FromSeconds(1)};t.Tick+=(_,_)=>{t.Stop();var row=Environment.GetCommandLineArgs().Contains("--image-preview")?visible.First(v=>v.Clip.Kind=="image"):visible[0];hovered=row.Clip;hoverAnchor=row.Row;ShowPreview();};t.Start();

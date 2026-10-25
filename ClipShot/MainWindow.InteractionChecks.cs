@@ -60,14 +60,14 @@ public sealed partial class MainWindow
             Check(ContainsText(visible.Single(v=>v.Clip.Id==untranslated).Row,"Настройки"),"language switch does not translate user clip contents");
             store.Set("language","ru");ApplyLanguage();Render();
             Check(Search.PlaceholderText=="Поиск по истории"&&SelectHint.Text=="Выбрать","Russian can be restored without restart");
-            Check(!microphoneStarted&&!microphoneTrayReady&&microphoneMouse is null,"isolated mode never installs microphone hooks or tray");
+            Check(!microphoneStarted&&!trayReady&&microphoneMouse is null,"isolated mode never installs microphone hooks or tray");
             var microphonePanel=new Microsoft.UI.Xaml.Controls.StackPanel();var saveMic=MicrophoneSettings(microphonePanel);
             Check(microphonePanel.Children.Single() is Microsoft.UI.Xaml.Controls.Expander expander&&!expander.IsExpanded,"microphone settings are initially collapsed");
             saveMic();Check(store.Get("micmouse","0")=="0"&&!microphoneStarted,"mouse button is unassigned by default and tests do not change hardware");
             nint foreground=Native.GetForegroundWindow();
             var notice=new MicrophoneNotice("Тестовый микрофон включён","Синтетические данные",MicrophoneState.Enabled);await Task.Delay(200);
             Check(Native.GetForegroundWindow()==foreground,"microphone notice does not steal focus");notice.Close();
-            foreach(var state in Enum.GetValues<MicrophoneState>()){nint icon=MicrophoneIcon(state);Check(icon!=0,"microphone tray icon "+state);if(icon!=0)Native.DestroyIcon(icon);}
+            foreach(var state in Enum.GetValues<MicrophoneState>()){nint icon=MicrophoneIcon(state);Check(icon!=0,"shared ClipShot tray icon "+state);if(icon!=0)Native.DestroyIcon(icon);}
             Native.PostMessage(hwnd,0x0112,0xF020,0);await Task.Delay(150);
             Check(!AppWindow.IsVisible,"minimize hides the window to the tray");ShowNearCursor();
         }
