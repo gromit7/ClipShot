@@ -1,4 +1,4 @@
-﻿namespace ClipShot;
+namespace ClipShot;
 
 // Russian is always the default; the OS language never changes the user's choice.
 public sealed class UiText(string? language)
@@ -8,6 +8,8 @@ public sealed class UiText(string? language)
     public static string Russian(string text)=>EnglishText.FirstOrDefault(p=>p.Value==text).Key??text;
     private static readonly Dictionary<string,string> EnglishText=new(StringComparer.Ordinal)
     {
+        ["Всегда поверх окон"]="Always on top",
+        ["«Всегда поверх окон» в меню правой кнопки сохраняет панель и раскрытый раздел при переходе в другое приложение. По умолчанию выключено; выбор запоминается. Esc и значок трея по-прежнему скрывают панель."]="Always on top in the right-click menu keeps the panel and its open section visible when switching applications. Off by default; your choice is saved. Esc and the tray icon still hide the panel.",
         ["Значок трея скрывает и показывает окно. Правая кнопка на пустом месте — настройки, справка и выход. Перетаскивание за пустое место двигает окно; нижний угол меняет размер. Esc скрывает окно."]="The tray icon hides and shows the window. Right-click empty space for Settings, Help and Exit. Drag empty space to move; use the bottom corner to resize. Esc hides the window.",
         ["Экспорт…"]="Export…",["Экспорт PNG или JPEG · Ctrl+S"]="Export PNG or JPEG · Ctrl+S",
         ["Такой снимок уже есть в истории. Исходный клип не изменён."]="This image already exists in history. The original clip was not changed.",
@@ -110,6 +112,8 @@ public sealed class UiText(string? language)
         ["Выбранная боковая кнопка переключает микрофон вместо перехода назад/вперёд. В Logi Options+ можно назначить Ctrl+Alt+M на кнопку MX Vertical. Зелёный — включён, красный — выключен, жёлтый — смешанный статус, серый — недоступен. Статус означает отключение звука в Windows, а не использование микрофона приложением."]="The selected side button toggles the microphone instead of navigating back/forward. In Logi Options+, you can assign Ctrl+Alt+M to an MX Vertical button. Green: on; red: muted; yellow: mixed; grey: unavailable. Status indicates Windows mute, not whether an app is using the microphone.",
         ["На неделе"]="This week",["Месяц"]="This month",["Ранее"]="Earlier",
         ["Проверить обновление"]="Check for updates",
+        ["Обновление готово"]="Update ready",["Установить сейчас или во время перерыва?"]="Install now or during a break?",["Установить сейчас"]="Install now",["Версия в трее · Установка сразу или после перерыва"]="Tray version · Install now or during a break",
+        ["Связь прервана · повторяем…"]="Connection interrupted · retrying…",["Программа перезапустится сама."]="The application will restart automatically.",["Закройте редактор перед обновлением"]="Close the editor before updating",
         ["Переместить окно"]="Move window",
         ["Программа обновлена"]="Application updated",["Программа установлена"]="Application installed",
         ["Обновлений нет"]="No updates available",["Не удалось проверить обновления"]="Could not check for updates",

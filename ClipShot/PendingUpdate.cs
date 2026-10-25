@@ -1,0 +1,30 @@
+using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+namespace ClipShot;
+
+// Сохраняется только описание уже проверенного пакета, без данных буфера.
+public sealed record PendingPackage(string FilePath,AppUpdate Update);
+public static class PendingUpdate
+{
+    public static PendingPackage? Read(string json,string updatesRoot,Version current)
+    {
+        if(Encoding.UTF8.GetByteCount(json)>16384)throw new InvalidDataException();
+        var pending=JsonSerializer.Deserialize<PendingPackage>(json)??throw new InvalidDataException();
+        var update=pending.Update??throw new InvalidDataException();
+        // Сохранённый флаг не заменяет свежую аварийную политику: после перезапуска
+        // установленная версия или разрешение отката могли измениться.
+        if(update.IsRollback)return null;
+        var installed=new Version(current.Major,current.Minor,Math.Max(0,current.Build));
+        if(update.Version<=installed)return null;
+        string version=update.Version.ToString();
+        string name=$"ClipShot-Setup-{version}.exe";
+        string root=Path.GetFullPath(updatesRoot)+Path.DirectorySeparatorChar;
+        string path=Path.GetFullPath(pending.FilePath);
+        string url=$"https://github.com/gromit7/ClipShot/releases/download/v{version}/{name}";
+        if(!Regex.IsMatch(version,@"^\d+\.\d+\.\d+$")||update.Version<new Version(0,7,0)||update.Download?.AbsoluteUri!=url||
+            !path.StartsWith(root,StringComparison.OrdinalIgnoreCase)||Path.GetFileName(path)!=name||
+            update.Bytes is <1024 or >262144000||!Regex.IsMatch(update.Sha256??"",@"^[a-fA-F0-9]{64}$")||!UpdateProtocol.Verify(path,update))throw new InvalidDataException();
+        return pending;
+    }
+}

@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Windowing;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -48,7 +48,7 @@ internal sealed class MicrophoneNotice : Window
         var copy=new StackPanel{Width=334,Spacing=5,RenderTransform=new TranslateTransform()};Canvas.SetLeft(copy,100);Canvas.SetTop(copy,23);canvas.Children.Add(copy);
         var brand=new TextBlock{Text="CLIPSHOT",FontFamily=new FontFamily("Bahnschrift"),FontSize=11,CharacterSpacing=240,Foreground=accent};copy.Children.Add(brand);
         copy.Children.Add(new TextBlock{Text=text.ToUpperInvariant(),FontFamily=new FontFamily("Bahnschrift SemiCondensed"),FontWeight=Microsoft.UI.Text.FontWeights.Bold,FontSize=23,Foreground=white,TextWrapping=TextWrapping.Wrap,MaxLines=2,TextTrimming=TextTrimming.CharacterEllipsis});
-        copy.Children.Add(new TextBlock{Text=detail,FontFamily=new FontFamily("Segoe UI"),FontSize=12,Foreground=Brush(177,185,204),TextTrimming=TextTrimming.CharacterEllipsis,MaxLines=1});
+        copy.Children.Add(new TextBlock{Text=detail,FontFamily=new FontFamily("Segoe UI"),FontSize=12,Foreground=Brush(177,185,204),TextTrimming=TextTrimming.CharacterEllipsis,MaxLines=appNotice?3:1,TextWrapping=appNotice?TextWrapping.Wrap:TextWrapping.NoWrap});
         for(int i=0;i<3;i++)Shape(accent,[101+i*9,121,106+i*9,115,110+i*9,115,105+i*9,121]);
         Content=new Viewbox{Child=canvas,Stretch=Stretch.Fill};
         Native.GetCursorPos(out var cursor);var area=DisplayArea.GetFromPoint(new PointInt32(cursor.X,cursor.Y),DisplayAreaFallback.Nearest).WorkArea;
