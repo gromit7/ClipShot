@@ -33,7 +33,7 @@ public sealed partial class MainWindow
     private void FitCompactPanel(List<ClipGroup> groups)
     {
         int count=groups.Count(g=>g.Clips.Count>0);
-        if(!SideSections||compactGroupCount==count||dialogOpen)return;
+        if(!SideSections||compactGroupCount==count||dialogOpen||windowResizing)return;
         compactGroupCount=count;
         if(store.Get("panelautofit","1")!="1")return;
         double scale=Math.Max(1,Native.GetDpiForWindow(hwnd)/96d);

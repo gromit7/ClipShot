@@ -12,6 +12,7 @@ public sealed partial class MainWindow
     private bool updateChecking,updateDownloading,updateInstallRequested,updateInstalling,requestedAutomatically,updateApplying,updateMetadataValid;
     private AppUpdate? preparedUpdate;
     private DateTime nextUpdateAttempt;
+    private DateTime nextUpdateCheckAttempt;
     private string? preparedInstaller;
     private bool startupUpdatePending,updateLaunchRequested,manualUpdateRequested,checkAfterLaunch=true;
     private readonly DateTime startupInstallUntil=DateTime.UtcNow.AddMinutes(2);
@@ -19,6 +20,7 @@ public sealed partial class MainWindow
     private string updateDownloadText="";
     private string PendingUpdateFile=>Path.Combine(dataFolder,"Updates","pending.json");
     private bool AutomaticUpdates=>true;
+    private string NoUpdatesVersionDetail=>$"{T("Текущая версия")}: {typeof(App).Assembly.GetName().Version!.ToString(3)}";
     private bool UpdateOperationBusy=>dialogOpen||takingScreenshot||editor is not null||capturing||captureAgain;
     private bool CanAutoDownload()=>!isolated&&!exiting&&AutomaticUpdates&&!UpdateOperationBusy;
     // Фоновая установка использует guarded UpdateQuit и ждёт простоя.
@@ -38,11 +40,13 @@ public sealed partial class MainWindow
         {
             updateTimer.Interval=TimeSpan.FromSeconds(15);
             if(exiting||updateInstalling||updateDownloading||updateChecking||updateApplying)return;
-            var slot=UpdateSchedule.GetDueSlot(DateTime.Now,store.Get("updatecheckslot",""));
+            var slot=!UpdateOperationBusy&&DateTime.UtcNow>=nextUpdateCheckAttempt
+                ?UpdateSchedule.GetDueSlot(DateTime.Now,store.Get("updatecheckslot",""),UserInactivity.Read()):null;
             if(checkAfterLaunch||slot is not null)
             {
-                // Слот записываем до HTTP. Неудачная попытка и перезапуск не создают лишние GET.
-                bool resuming=startupUpdatePending;checkAfterLaunch=false;if(slot is not null)store.Set("updatecheckslot",slot);await CheckUpdates(false);
+                // Успех сохраняется для всех входов в CheckUpdates. После сетевой
+                // ошибки повтор в простое отложен, чтобы не создавать петлю GET.
+                bool resuming=startupUpdatePending;checkAfterLaunch=false;await CheckUpdates(false);
                 startupUpdatePending=false;
                 if(resuming&&(!updateMetadataValid||preparedInstaller is null)&&!Environment.GetCommandLineArgs().Contains("--background"))ShowNearCursor();
             }
@@ -59,7 +63,7 @@ public sealed partial class MainWindow
             {
                 noticeTimer.Stop();if(exiting)return;
                 ShowUpdateMessage(install.EndsWith("=installed",StringComparison.Ordinal)?"Программа установлена":"Программа обновлена",
-                    "• Версия в трее\n• Быстрое ручное обновление\n• Продолжение после перезапуска",persistent:true);
+                    "• Разделы раскрываются при наведении\n• Розовая тема с котиками\n• Пакет для вашей версии Windows",persistent:true);
             };noticeTimer.Start();
         }
     }
@@ -90,6 +94,7 @@ public sealed partial class MainWindow
         bool ready=preparedInstaller is not null&&updateMetadataValid&&!updateInstalling&&!updateLaunchRequested;
         ManualUpdateLink.IsEnabled=!updateChecking&&!updateDownloading&&!updateInstalling&&!updateLaunchRequested;
         ManualUpdateLink.Content=updateLaunchRequested||updateInstalling?T("Устанавливаем обновление…"):updateChecking?T("Проверяем обновления…"):updateDownloading?updateDownloadText:T(ready?"Обновить сейчас":"Проверить обновление");
+        if(ready&&preparedUpdate is not null)ManualUpdateLink.Content=$"{T("Обновить сейчас")} · {preparedUpdate.Version}";
         if(ready==updatePulseActive)return;
         updatePulseActive=ready;updatePulse.Stop();updatePulse.Children.Clear();
         if(ready)
@@ -130,7 +135,8 @@ public sealed partial class MainWindow
         try
         {
             availableUpdate=await updateClient.CheckAsync(typeof(App).Assembly.GetName().Version!,updateStop.Token);
-            if(exiting)return;updateMetadataValid=true;
+            if(exiting)return;updateMetadataValid=true;nextUpdateCheckAttempt=DateTime.MinValue;
+            store.Set("updatecheckslot",UpdateSchedule.DayKey(DateTime.Now));
             if(availableUpdate is {IsRollback:false}&&availableUpdate.Version.ToString()==store.Get("updateskip",""))availableUpdate=null;
             if(preparedUpdate is not null&&preparedUpdate!=availableUpdate)
             {
@@ -138,12 +144,16 @@ public sealed partial class MainWindow
             }
             if(manual||manualUpdateRequested)
             {
-                if(availableUpdate is null)ShowUpdateMessage("Обновлений нет");
-                else download=true;
+                if(availableUpdate is null)ShowUpdateMessage("Обновлений нет",NoUpdatesVersionDetail);
+                else
+                {
+                    ShowUpdateMessage(availableUpdate.IsRollback?"Восстановление версии":"Новая версия",availableUpdate.Version.ToString());
+                    download=true;
+                }
             }
         }
-        catch(OperationCanceledException){if(!exiting&&(manual||manualUpdateRequested))ShowUpdateMessage("Не удалось проверить обновления","Повторите позже.");}
-        catch{if(!exiting&&(manual||manualUpdateRequested))ShowUpdateMessage("Не удалось проверить обновления","Повторите позже.");}
+        catch(OperationCanceledException){nextUpdateCheckAttempt=DateTime.UtcNow.AddMinutes(30);if(!exiting&&(manual||manualUpdateRequested))ShowUpdateMessage("Не удалось проверить обновления","Повторите позже.");}
+        catch{nextUpdateCheckAttempt=DateTime.UtcNow.AddMinutes(30);if(!exiting&&(manual||manualUpdateRequested))ShowUpdateMessage("Не удалось проверить обновления","Повторите позже.");}
         finally{updateChecking=false;ShowUpdateOffer();}
         if(download&&updateMetadataValid&&!exiting)await DownloadUpdate(false);
         else if(!updateDownloading)manualUpdateRequested=false;
@@ -179,7 +189,7 @@ public sealed partial class MainWindow
         try
         {
             string folder=Path.Combine(dataFolder,"Updates",candidate.Version+"-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);
-            string path=Path.Combine(folder,$"ClipShot-Setup-{candidate.Version}.exe");
+            string path=Path.Combine(folder,UpdatePackages.FileName(candidate));
             await updateClient.DownloadAsync(candidate,path,new Progress<int>(percent=>{if(exiting)return;updateDownloadText=$"{T("Загрузка обновления")} · {percent}%";ShowUpdateOffer();}),updateStop.Token,attempt=>{updateDownloadText=T("Связь прервана · повторяем…");ShowUpdateOffer();});
             if(exiting)return;preparedInstaller=path;preparedUpdate=candidate;SavePendingUpdate();TryInstallUpdate(startup:automatic&&CanStartupInstall);
             if(!automatic&&!updateInstalling)await OfferImmediateUpdate();

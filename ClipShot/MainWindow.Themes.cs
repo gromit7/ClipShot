@@ -27,6 +27,7 @@ public sealed partial class MainWindow
         TitleText.FontFamily=new FontFamily(activeTheme.Font);TitleText.Foreground=titleBrush;SettingsButton.Foreground=titleBrush;HelpButton.Foreground=titleBrush;
         PaintText(FooterSurface,primaryBrush);
         StyleTitleBar();
+        ApplyCatTheme();
     }
     private void StyleTitleBar()
     {

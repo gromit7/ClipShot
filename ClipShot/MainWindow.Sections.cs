@@ -18,6 +18,7 @@ public sealed partial class MainWindow
     private bool sectionFocusTimerReady;
     private void CollapseSection()
     {
+        CancelSectionHover();
         if(!SideSections)return;
         activeSection=null;sectionInitialized=true;sectionPopup.IsOpen=false;preview.IsOpen=false;hoverTimer.Stop();hovered=null;
     }
@@ -65,6 +66,7 @@ public sealed partial class MainWindow
     }
     private void ToggleSection(string title)
     {
+        CancelSectionHover();suppressedHoverSection=title;
         if(SideSections){activeSection=activeSection==title?null:title;sectionInitialized=true;Render();Search.Focus(FocusState.Programmatic);}
         else{expanded[title]=!expanded.GetValueOrDefault(title);Render();}
     }

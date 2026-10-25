@@ -30,24 +30,34 @@ do{
     Start-Sleep -Seconds 10
 }while($true)
 $setup=Join-Path $repo "ClipShot-Setup-$version.exe"
+$setups=@($setup,(Join-Path $repo "ClipShot-Win10-Setup-$version.exe"),(Join-Path $repo "ClipShot-Win11-Setup-$version.exe"))
 & (Join-Path $PSScriptRoot 'New-ReleaseEvidence.ps1') -Setup $setup -MakeNsis $MakeNsis
-$assets=@($setup,(Join-Path $repo 'SHA256SUMS.txt'),(Join-Path $repo "ClipShot-$version-buildinfo.json"),(Join-Path $repo "ClipShot-$version-checks.json"))
+$assets=$setups+@((Join-Path $repo 'SHA256SUMS.txt'),(Join-Path $repo "ClipShot-$version-buildinfo.json"),(Join-Path $repo "ClipShot-$version-checks.json"))
+function Confirm-Packages($Release,[string[]]$Paths){
+    foreach($path in $Paths){
+        $file=Get-Item -LiteralPath $path
+        $matching=@($Release.assets | Where-Object name -eq $file.Name)
+        $hash=(Get-FileHash -LiteralPath $path).Hash.ToLowerInvariant()
+        if($matching.Count -ne 1 -or $matching[0].state -ne 'uploaded' -or $matching[0].size -ne $file.Length -or $matching[0].digest -ne "sha256:$hash"){throw "GitHub не подтвердил пакет $($file.Name), его размер и SHA-256."}
+        $expectedUrl="https://github.com/$repository/releases/download/$tag/$($file.Name)"
+        # До публикации GitHub может дать URL untagged-*. Для черновика
+        # достаточно имени/размера/digest; публичный latest проверяется строго.
+        if(-not $Release.draft -and $matching[0].browser_download_url -cne $expectedUrl){throw "Неверный адрес пакета $($file.Name)."}
+    }
+}
 # Черновик не попадёт к обновлятору. Полный SHA связывает выпуск с исходниками.
 GitHub -Arguments (@('release','create',$tag,'--repo',$repository,'--target',$commit,'--title',"ClipShot $version",'--notes-file',$NotesFile,'--draft')+$assets) | Write-Output
 # У черновика ещё нет публичного тега: проверяем по ID, а не через releases/tags.
 $releaseId=(GitHub -Arguments @('release','view',$tag,'--repo',$repository,'--json','databaseId','--jq','.databaseId')).Trim()
 $release=GitHub -Arguments @('api',"repos/$repository/releases/$releaseId") | ConvertFrom-Json
-$asset=$release.assets | Where-Object name -eq "ClipShot-Setup-$version.exe"
-$hash=(Get-FileHash -LiteralPath $setup).Hash.ToLowerInvariant()
-if(-not $asset -or $asset.state -ne 'uploaded' -or $asset.size -ne (Get-Item $setup).Length -or $asset.digest -ne "sha256:$hash"){throw 'GitHub не подтвердил размер и SHA-256. Черновик сохранён.'}
+Confirm-Packages $release $setups
 GitHub -Arguments @('release','edit',$tag,'--repo',$repository,'--draft=false','--latest') | Write-Output
 $latest=GitHub -Arguments @('api',"repos/$repository/releases/latest") | ConvertFrom-Json
 if($latest.tag_name -ne $tag){throw 'Лента автообновления не указывает на новый выпуск.'}
-$published=$latest.assets | Where-Object name -eq "ClipShot-Setup-$version.exe"
-if($published.digest -ne "sha256:$hash"){throw 'Контрольная сумма в ленте не совпадает.'}
+Confirm-Packages $latest $setups
 # Ленту переключаем только после проверки российского зеркала. При ошибке
 # опубликованный GitHub-пакет сохраняется; продолжение выполняется штатным publisher.
 & (Join-Path $PSScriptRoot 'Publish-Mirror.ps1') -Version $version
 & (Join-Path $PSScriptRoot 'Publish-UpdateFeed.ps1') -ExpectedVersion $version -Publish
 & (Join-Path $PSScriptRoot 'Publish-Installer.ps1') -Setup $setup
-Write-Output "Выпущен ClipShot ${version}: GitHub, автообновление и локальный установщик совпадают."
+Write-Output "Выпущен ClipShot ${version}: GitHub и зеркало содержат три проверенных пакета; лента выбирает Windows 10/11, на D сохранены два явных установщика."

@@ -3,7 +3,39 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 namespace ClipShot;
-public sealed record AppUpdate(Version Version,Uri Download,long Bytes,string Sha256,bool IsRollback=false,string Reason="");
+public sealed record AppUpdate(Version Version,Uri Download,long Bytes,string Sha256,bool IsRollback=false,string Reason="",string PackageName="");
+// Имя пакета — часть проверенных метаданных GitHub, а не свободное имя файла.
+// Legacy остаётся для клиентов 0.7.0–0.7.3; новые клиенты выбирают пакет по реальной сборке ОС.
+public static class UpdatePackages
+{
+    public const int MinimumBuild=17763,Windows11Build=22000;
+    public static string? FlavorForBuild(int build)=>build<MinimumBuild?null:build<Windows11Build?"win10":"win11";
+    public static bool Supports(string flavor,int build)=>flavor switch
+    {
+        "legacy"=>build>=MinimumBuild,"win10"=>build>=MinimumBuild&&build<Windows11Build,
+        "win11"=>build>=Windows11Build,_=>false
+    };
+    public static string Name(Version version,string flavor="legacy")
+    {
+        if(!Regex.IsMatch(version.ToString(),@"^\d+\.\d+\.\d+$"))throw new InvalidDataException("Invalid package version");
+        string prefix=flavor switch{"legacy"=>"ClipShot-","win10"=>"ClipShot-Win10-","win11"=>"ClipShot-Win11-",_=>throw new InvalidDataException("Unknown package flavor")};
+        return prefix+"Setup-"+version+".exe";
+    }
+    public static bool TryParseName(string name,out Version version,out string flavor)
+    {
+        version=new Version(0,0,0);flavor="";
+        var match=Regex.Match(name,@"^ClipShot-(?:(Win10|Win11)-)?Setup-(\d+\.\d+\.\d+)\.exe$");
+        if(!match.Success||!Version.TryParse(match.Groups[2].Value,out var parsed))return false;
+        version=parsed;flavor=match.Groups[1].Value switch{"Win10"=>"win10","Win11"=>"win11",_=>"legacy"};
+        return name==Name(version,flavor);
+    }
+    public static string FileName(AppUpdate update)
+    {
+        string name=string.IsNullOrEmpty(update.PackageName)?Name(update.Version):update.PackageName;
+        if(!TryParseName(name,out var version,out _)||version!=update.Version)throw new InvalidDataException("Package name mismatch");
+        return name;
+    }
+}
 public sealed record RollbackPolicy(Version Target,string Reason)
 {
     // Понижение разрешает только явный список затронутых версий. До 0.7 откатывать нельзя: там нет обновлятора.
@@ -25,7 +57,7 @@ public sealed record RollbackPolicy(Version Target,string Reason)
 public static class UpdateProtocol
 {
     public const long MaximumBytes=250L*1024*1024;
-    public static AppUpdate? Parse(string json,Version current,bool allowRollback=false)
+    public static AppUpdate? Parse(string json,Version current,bool allowRollback=false,string flavor="legacy",int? osBuild=null)
     {
         using var document=JsonDocument.Parse(json);var release=document.RootElement;
         if(release.GetProperty("draft").GetBoolean()||release.GetProperty("prerelease").GetBoolean())return null;
@@ -33,7 +65,8 @@ public static class UpdateProtocol
         if(!Regex.IsMatch(tag,@"^v\d+\.\d+\.\d+$")||!Version.TryParse(tag[1..],out var version))return null;
         var installed=new Version(current.Major,current.Minor,Math.Max(0,current.Build));
         if(version==installed||(!allowRollback&&version<installed))return null;
-        string name=$"ClipShot-Setup-{version}.exe";
+        string name=UpdatePackages.Name(version,flavor);
+        if(osBuild is int build&&!UpdatePackages.Supports(flavor,build))throw new InvalidDataException("Package does not support this Windows build");
         foreach(var asset in release.GetProperty("assets").EnumerateArray())
         {
             if(asset.GetProperty("name").GetString()!=name)continue;
@@ -42,7 +75,7 @@ public static class UpdateProtocol
             var uri=new Uri(asset.GetProperty("browser_download_url").GetString()!);
             string expected=$"/gromit7/ClipShot/releases/download/{tag}/{name}";
             if(uri.Scheme!="https"||uri.Host!="github.com"||!uri.IsDefaultPort||uri.AbsolutePath!=expected||uri.Query.Length!=0||uri.Fragment.Length!=0||uri.UserInfo.Length!=0)throw new InvalidDataException("Unexpected update location");
-            return new(version,uri,size,digest[7..].ToLowerInvariant());
+            return new(version,uri,size,digest[7..].ToLowerInvariant(),PackageName:name);
         }
         return null;
     }
@@ -68,11 +101,11 @@ internal sealed class GitHubUpdates : IDisposable
         feedHttp.Timeout=TimeSpan.FromSeconds(10);feedHttp.DefaultRequestHeaders.UserAgent.ParseAdd("ClipShot/1.0");feedHttp.DefaultRequestHeaders.Accept.ParseAdd("application/json");
         feedHttp.DefaultRequestHeaders.CacheControl=new(){NoCache=true};
     }
-    internal async Task<AppUpdate?> CheckAsync(Version version,CancellationToken token)
+    internal async Task<AppUpdate?> CheckAsync(Version version,CancellationToken token,int? osBuild=null)
     {
         using var timeout=CancellationTokenSource.CreateLinkedTokenSource(token);timeout.CancelAfter(TimeSpan.FromSeconds(10));
         string json=await ReadFeed(timeout.Token);
-        return UpdateFeed.Parse(json,version);
+        return UpdateFeed.Parse(json,version,osBuild);
     }
     private async Task<string> ReadFeed(CancellationToken token)
     {

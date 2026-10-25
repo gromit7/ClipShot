@@ -45,11 +45,15 @@ internal static class Program
                 StopApp();Restore();await Restart("--background --install-result=rollback --skip-update="+skipped);return 0;
             }
             string installer=Path.GetFullPath(args[0]),hash=args[1];
-            if(!Inside(installer,UpdatesRoot)||!Regex.IsMatch(Path.GetFileName(installer),@"^ClipShot-Setup-\d+\.\d+\.\d+\.exe$")||!Regex.IsMatch(hash,@"^[a-fA-F0-9]{64}$"))return 2;
+            var package=Regex.Match(Path.GetFileName(installer),@"^ClipShot-(?:(Win10|Win11)-)?Setup-(?<version>\d+\.\d+\.\d+)\.exe$");
+            if(!Inside(installer,UpdatesRoot)||!package.Success||!Version.TryParse(package.Groups["version"].Value,out var packageVersion)||
+                packageVersion.ToString()!=package.Groups["version"].Value||!Regex.IsMatch(hash,@"^[a-fA-F0-9]{64}$"))return 2;
+            int build=Environment.OSVersion.Version.Build;string flavor=package.Groups[1].Value;
+            if(build<17763||flavor=="Win10"&&build>=22000||flavor=="Win11"&&build<22000)return 2;
             // Держим файл открытым без разрешения записи/удаления между проверкой и запуском.
             using var image=new FileStream(installer,FileMode.Open,FileAccess.Read,FileShare.Read);
             if(!Convert.ToHexString(SHA256.HashData(image)).Equals(hash,StringComparison.OrdinalIgnoreCase))return 3;
-            failedVersion=Path.GetFileNameWithoutExtension(installer)["ClipShot-Setup-".Length..];
+            failedVersion=package.Groups["version"].Value;
             string former=FileVersionInfo.GetVersionInfo(app).ProductVersion?.Split('+')[0]??"";
             bool downgrade=Version.TryParse(former,out var oldVersion)&&Version.Parse(failedVersion)<oldVersion;
             if(automatic&&!IdleEnough())return 4;

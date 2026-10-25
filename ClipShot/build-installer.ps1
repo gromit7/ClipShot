@@ -20,8 +20,14 @@ foreach($d in Get-ChildItem -LiteralPath $publish -Directory -Recurse | Sort-Obj
     $lines+='RMDir "$INSTDIR\'+$relative+'"'
 }
 Set-Content -LiteralPath (Join-Path $PSScriptRoot 'uninstall-files.nsh') -Value $lines -Encoding utf8
-& $MakeNsis /V2 /WX /INPUTCHARSET UTF8 "/DVERSION=$version" (Join-Path $PSScriptRoot 'installer.nsi')
-if($LASTEXITCODE -ne 0){throw "NSIS failed: $LASTEXITCODE"}
+# C# publish выполняется один раз. Три самостоятельных NSIS-обёртки включают
+# этот общий каталог, но имеют собственные имена и обязательные OS guards.
+foreach($flavor in 'legacy','win10','win11') {
+    & $MakeNsis /V2 /WX /INPUTCHARSET UTF8 "/DVERSION=$version" "/DFLAVOR=$flavor" (Join-Path $PSScriptRoot 'installer.nsi')
+    if($LASTEXITCODE -ne 0){throw "NSIS $flavor failed: $LASTEXITCODE"}
+    $packageName=switch($flavor){'legacy'{"ClipShot-Setup-$version.exe"};'win10'{"ClipShot-Win10-Setup-$version.exe"};'win11'{"ClipShot-Win11-Setup-$version.exe"}}
+    if(-not(Test-Path -LiteralPath (Join-Path (Split-Path $PSScriptRoot) $packageName))){throw "Compiled installer not found: $packageName"}
+}
 $setup=Join-Path (Split-Path $PSScriptRoot) ("ClipShot-Setup-"+$version+".exe")
 if(-not (Test-Path -LiteralPath $setup)){throw 'Compiled installer not found.'}
 if($NoLatestCopy){return}

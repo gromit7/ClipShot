@@ -76,7 +76,12 @@ public sealed partial class MainWindow : Window
         if(!isolated||shellTest){RegisterKey();RegisterScreenshotKey();RegisterScreenshotAlias();CreateTray();}
         StartMicrophone();StartUpdates();ApplyTheme(); Root.ActualThemeChanged+=(_,_)=>{StyleTitleBar();Render();}; Prune(); Render();
         Root.AddHandler(UIElement.KeyDownEvent,new KeyEventHandler(RootKeyDown),true);
-        Root.AddHandler(UIElement.PointerPressedEvent,new PointerEventHandler(DragEmptySpace),true);
+        Root.PointerPressed+=DragEmptySpace;
+        Root.AddHandler(UIElement.PointerMovedEvent,new PointerEventHandler(WindowPointerMoved),true);
+        Root.AddHandler(UIElement.PointerReleasedEvent,new PointerEventHandler(WindowPointerEnded),true);
+        Root.AddHandler(UIElement.PointerCanceledEvent,new PointerEventHandler(WindowPointerEnded),true);
+        Root.AddHandler(UIElement.PointerCaptureLostEvent,new PointerEventHandler(WindowPointerEnded),true);
+        Activated+=(_,e)=>{if(e.WindowActivationState==WindowActivationState.Deactivated)EndWindowPointerGesture();};
         hoverTimer.Tick+=(_,_)=>{hoverTimer.Stop();ShowPreview();};
         leaveTimer.Tick+=(_,_)=>{leaveTimer.Stop();if(!overPreview&&hovered==null)preview.IsOpen=false;};
         cleanupTimer.Tick+=(_,_)=>{Prune();Render();}; cleanupTimer.Start();
@@ -147,6 +152,7 @@ public sealed partial class MainWindow : Window
     }
     public void ShowNearCursor()
     {
+        EndWindowPointerGesture();
         RememberPasteTarget();
         if(editor is not null){editor.AppWindow.Show();editor.Activate();return;}
         if(takingScreenshot||exiting||startupUpdatePending)return;
@@ -156,7 +162,7 @@ public sealed partial class MainWindow : Window
         int y=Math.Clamp(p.Y+12,area.Y,Math.Max(area.Y,area.Y+area.Height-AppWindow.Size.Height));
         AppWindow.Move(new PointInt32(x,y));AppWindow.Show();Activate();Native.SetForegroundWindow(hwnd);Search.Focus(FocusState.Programmatic);PositionSection();WatchPanelFocus();ShowUpdateOffer();
     }
-    private void Hide(){CancelPanelFade();activeDialog?.Hide();sectionFocusTimer.Stop();sectionPopup.IsOpen=false;preview.IsOpen=false;hoverTimer.Stop();leaveTimer.Stop();AppWindow.Hide();Search.Text="";}
+    private void Hide(){EndWindowPointerGesture();CancelSectionHover();CancelPanelFade();activeDialog?.Hide();sectionFocusTimer.Stop();sectionPopup.IsOpen=false;preview.IsOpen=false;hoverTimer.Stop();leaveTimer.Stop();AppWindow.Hide();Search.Text="";}
     private void ToggleVisibility()
     {
         if(exiting||takingScreenshot)return;
@@ -166,7 +172,7 @@ public sealed partial class MainWindow : Window
     private void Quit()
     {
         if(exiting)return;
-        exiting=true;CancelPanelFade();activeDialog?.Hide();sectionFocusTimer.Stop();sectionPopup.IsOpen=false;StopUpdates();StopMicrophone();hoverTimer.Stop();leaveTimer.Stop();cleanupTimer.Stop();
+        EndWindowPointerGesture();exiting=true;CancelSectionHover();CancelPanelFade();activeDialog?.Hide();sectionFocusTimer.Stop();sectionPopup.IsOpen=false;StopUpdates();StopMicrophone();hoverTimer.Stop();leaveTimer.Stop();cleanupTimer.Stop();
         captureWindow?.Cancel();
         editor?.Close();
         if(!isolated)Native.RemoveClipboardFormatListener(hwnd);
@@ -176,6 +182,7 @@ public sealed partial class MainWindow : Window
     private async void TakeScreenshot()
     {
         if(takingScreenshot||(dialogOpen&&activeDialog is null)||exiting||editor is {CanCapture:false})return;
+        EndWindowPointerGesture();
         bool keepWindow=OwnForeground()||activeDialog is not null;
         bool restoreEditor=editor is {IsClosed:false}&&editor.AppWindow.IsVisible;
         takingScreenshot=true;
@@ -266,7 +273,7 @@ public sealed partial class MainWindow : Window
         if(rendering||exiting)return;rendering=true;
         try
         {
-            hoverTimer.Stop();preview.IsOpen=false;hovered=null;
+            CancelSectionHover();hoverTimer.Stop();preview.IsOpen=false;hovered=null;
             long? previousId=selected>=0&&selected<visible.Count?visible[selected].Clip.Id:null;
             Groups.Children.Clear();TemplateGroups.Children.Clear();sectionHeadings.Clear();visible.Clear();
             string query=Search.Text.Trim();
@@ -300,7 +307,8 @@ public sealed partial class MainWindow : Window
         var calmBase=((SolidColorBrush)ClipBrush("ClipHeaderBrush")).Color;var calmSelection=((SolidColorBrush)ClipBrush("ClipSelectionBrush")).Color;
         byte Blend(byte a,byte b)=>(byte)(a+(b-a)*.35);
         var calmHover=new SolidColorBrush(Windows.UI.Color.FromArgb(255,Blend(calmBase.R,calmSelection.R),Blend(calmBase.G,calmSelection.G),Blend(calmBase.B,calmSelection.B)));
-        button.PointerEntered+=(_,_)=>{hoverTimer.Stop();hovered=null;preview.IsOpen=false;headerBackground.Background=calmHover;};button.PointerExited+=(_,_)=>headerBackground.Background=ClipBrush("ClipHeaderBrush");
+        button.PointerEntered+=(_,_)=>{hoverTimer.Stop();hovered=null;preview.IsOpen=false;headerBackground.Background=calmHover;QueueSectionHover(title,button);};
+        button.PointerExited+=(_,_)=>{headerBackground.Background=ClipBrush("ClipHeaderBrush");LeaveSectionHover(title,button);};
         button.Click+=(_,_)=>ToggleSection(title);ClipRows.Children.Add(new Border{Child=button,BorderBrush=ClipBrush("ClipSeparatorBrush"),BorderThickness=new Thickness(0,0,0,1)});
         if(!buildingSection)sectionHeadings[title]=button;
         if(!open||SideSections&&!buildingSection)return;

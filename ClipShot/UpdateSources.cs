@@ -10,7 +10,7 @@ public static class UpdateSources
     public static Uri Package(Uri root,AppUpdate update)
     {
         if(root.Scheme!="https"||root.UserInfo.Length!=0||!root.IsDefaultPort||root.Query.Length!=0||root.Fragment.Length!=0||!root.AbsolutePath.EndsWith('/'))throw new InvalidDataException("Invalid mirror root");
-        return new Uri(root,$"v{update.Version}/ClipShot-Setup-{update.Version}.exe");
+        return new Uri(root,$"v{update.Version}/{UpdatePackages.FileName(update)}");
     }
     public static async Task<IReadOnlyList<Uri>> RankAsync(HttpClient http,AppUpdate update,IEnumerable<Uri> mirrors,CancellationToken token)
     {

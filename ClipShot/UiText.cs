@@ -8,6 +8,10 @@ public sealed class UiText(string? language)
     public static string Russian(string text)=>EnglishText.FirstOrDefault(p=>p.Value==text).Key??text;
     private static readonly Dictionary<string,string> EnglishText=new(StringComparer.Ordinal)
     {
+        ["Розовая с котиками"]="Pink with cats",
+        ["• Разделы раскрываются при наведении\n• Розовая тема с котиками\n• Пакет для вашей версии Windows"]="• Hover to open sections\n• Pink theme with cats\n• Package for your Windows version",
+        ["Наведите мышь на Сегодня, Шаблоны или другую дату — список раскроется без клика. Разделы открываются в сторону свободного места; обычный список можно вернуть в настройках. Пустые разделы скрыты."]="Hover over Today, Templates or another date to open its list without clicking. Sections open toward available space; inline mode is available in Settings. Empty sections are hidden.",
+        ["Восемь тем: градиентная, прозрачная, белая, чёрная, тёмная, Windows 98, Windows XP и розовая с чёрным и рыжим котиками."]="Eight themes: gradient, transparent, white, black, dark, Windows 98, Windows XP and pink with black and ginger cats.",
         ["Всегда поверх окон"]="Always on top",
         ["«Всегда поверх окон» в меню правой кнопки сохраняет панель и раскрытый раздел при переходе в другое приложение. По умолчанию выключено; выбор запоминается. Esc и значок трея по-прежнему скрывают панель."]="Always on top in the right-click menu keeps the panel and its open section visible when switching applications. Off by default; your choice is saved. Esc and the tray icon still hide the panel.",
         ["Значок трея скрывает и показывает окно. Правая кнопка на пустом месте — настройки, справка и выход. Перетаскивание за пустое место двигает окно; нижний угол меняет размер. Esc скрывает окно."]="The tray icon hides and shows the window. Right-click empty space for Settings, Help and Exit. Drag empty space to move; use the bottom corner to resize. Esc hides the window.",
@@ -116,7 +120,8 @@ public sealed class UiText(string? language)
         ["Связь прервана · повторяем…"]="Connection interrupted · retrying…",["Программа перезапустится сама."]="The application will restart automatically.",["Закройте редактор перед обновлением"]="Close the editor before updating",
         ["Переместить окно"]="Move window",
         ["Программа обновлена"]="Application updated",["Программа установлена"]="Application installed",
-        ["Обновлений нет"]="No updates available",["Не удалось проверить обновления"]="Could not check for updates",
+        ["Обновлений нет"]="No updates available",["Текущая версия"]="Current version",["Не удалось проверить обновления"]="Could not check for updates",
+        ["Обновления: проверка при запуске и раз в день во время простоя. Кнопка внизу окна или в трее проверяет, скачивает и устанавливает обновление с перезапуском. Докачка после обрыва, данные сохраняются. Открытый редактор защищён. Плашки показывают текущую или новую версию; готовая кнопка «Обновить сейчас» мягко пульсирует."]="Updates: checked at startup and once daily while idle. The button below or in the tray checks, downloads, installs and restarts the app. Downloads resume after interruptions and data is preserved. An open editor is protected. Notices show the current or new version; the ready Update now button gently pulses.",
         ["Повторите позже."]="Please try again later.",["Обновление скачано"]="Update downloaded",
         ["Установится во время перерыва."]="Will install during a break.",["Не удалось скачать обновление"]="Could not download the update",
         ["Не удалось установить обновление"]="Could not install the update",

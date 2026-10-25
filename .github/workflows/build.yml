@@ -20,6 +20,12 @@ jobs:
       - name: Проверка пакета
         shell: pwsh
         run: ./scripts/Test-Release.ps1 -SkipBuild -SkipDesktop
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Лента, зеркало и пакеты Windows 10/11 на синтетических данных
+        shell: pwsh
+        run: ./scripts/Test-WindowsVariants.ps1
       - name: Отчёты тестов
         if: always()
         uses: actions/upload-artifact@v4
