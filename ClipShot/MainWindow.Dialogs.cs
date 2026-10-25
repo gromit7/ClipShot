@@ -7,7 +7,7 @@ public sealed partial class MainWindow
     private ContentDialog? activeDialog;
     private async Task<ContentDialogResult> ShowDialogAsync(ContentDialog dialog)
     {
-        activeDialog=dialog;dialogOpen=true;CancelPanelFade();sectionPopup.IsOpen=false;preview.IsOpen=false;
+        activeDialog=dialog;dialogOpen=true;CancelSectionHover();CancelPanelFade();sectionPopup.IsOpen=false;preview.IsOpen=false;
         var original=new RectInt32(AppWindow.Position.X,AppWindow.Position.Y,AppWindow.Size.Width,AppWindow.Size.Height);
         double scale=Math.Max(1,Native.GetDpiForWindow(hwnd)/96d);
         bool enlarged=original.Width<480*scale||original.Height<560*scale;

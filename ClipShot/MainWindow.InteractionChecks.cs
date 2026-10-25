@@ -23,6 +23,7 @@ public sealed partial class MainWindow
             store.Set("sectionlayout","side");Render();await Task.Delay(150);
             Check(Groups.Children.Count==1&&TemplateGroups.Children.Count==1&&sectionPopup.IsOpen&&visible.Count==5,"compact panel keeps dates above bottom templates and opens today beside it");
             Check(AppWindow.Size.Width<400&&AppWindow.Size.Height<300&&Search.PlaceholderText.Length==0,"default panel is compact and empty search has only a magnifier");
+            await RunSectionHoverChecks(results);
             var presenter=(Microsoft.UI.Windowing.OverlappedPresenter)AppWindow.Presenter;
             var pin=((Microsoft.UI.Xaml.Controls.MenuFlyout)Root.ContextFlyout).Items.OfType<Microsoft.UI.Xaml.Controls.ToggleMenuFlyoutItem>().Single(i=>Equals(i.Tag,"alwaysontop"));
             Check(!AlwaysOnTop&&!presenter.IsAlwaysOnTop&&!pin.IsChecked,"always-on-top is off by default in both saved preference and presenter");

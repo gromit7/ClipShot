@@ -9,6 +9,8 @@ public sealed class UiText(string? language)
     private static readonly Dictionary<string,string> EnglishText=new(StringComparer.Ordinal)
     {
         ["Розовая с котиками"]="Pink with cats",
+        ["Наведите мышь на Сегодня, Шаблоны или другую дату — список раскроется без клика. Разделы открываются в сторону свободного места; обычный список можно вернуть в настройках. Пустые разделы скрыты."]="Hover over Today, Templates or another date to open its list without clicking. Sections open toward available space; inline mode is available in Settings. Empty sections are hidden.",
+        ["Восемь тем: градиентная, прозрачная, белая, чёрная, тёмная, Windows 98, Windows XP и розовая с чёрным и рыжим котиками."]="Eight themes: gradient, transparent, white, black, dark, Windows 98, Windows XP and pink with black and ginger cats.",
         ["Всегда поверх окон"]="Always on top",
         ["«Всегда поверх окон» в меню правой кнопки сохраняет панель и раскрытый раздел при переходе в другое приложение. По умолчанию выключено; выбор запоминается. Esc и значок трея по-прежнему скрывают панель."]="Always on top in the right-click menu keeps the panel and its open section visible when switching applications. Off by default; your choice is saved. Esc and the tray icon still hide the panel.",
         ["Значок трея скрывает и показывает окно. Правая кнопка на пустом месте — настройки, справка и выход. Перетаскивание за пустое место двигает окно; нижний угол меняет размер. Esc скрывает окно."]="The tray icon hides and shows the window. Right-click empty space for Settings, Help and Exit. Drag empty space to move; use the bottom corner to resize. Esc hides the window.",
