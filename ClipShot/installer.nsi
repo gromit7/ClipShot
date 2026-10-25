@@ -5,7 +5,7 @@
 !include "WinVer.nsh"
 !include "FileFunc.nsh"
 !ifndef VERSION
-!define VERSION "0.7.3"
+!define VERSION "0.7.4"
 !endif
 !ifndef PUBLICATION_DIR
 !define PUBLICATION_DIR "..\ClipShot-app"

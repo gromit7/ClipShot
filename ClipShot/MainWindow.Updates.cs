@@ -59,7 +59,7 @@ public sealed partial class MainWindow
             {
                 noticeTimer.Stop();if(exiting)return;
                 ShowUpdateMessage(install.EndsWith("=installed",StringComparison.Ordinal)?"Программа установлена":"Программа обновлена",
-                    "• Версия в трее\n• Быстрое ручное обновление\n• Продолжение после перезапуска",persistent:true);
+                    "• Разделы раскрываются при наведении\n• Розовая тема с котиками\n• Пакет для вашей версии Windows",persistent:true);
             };noticeTimer.Start();
         }
     }
