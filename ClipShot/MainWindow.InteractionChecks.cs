@@ -12,6 +12,15 @@ public sealed partial class MainWindow
         try
         {
             Check(Groups.Children.Count==visible.Count+2,"empty date sections are hidden without a search");
+            store.Set("sectionlayout","side");Render();await Task.Delay(150);
+            Check(Groups.Children.Count==2&&sectionPopup.IsOpen&&visible.Count==5,"side layout keeps only headings in main window and opens today beside it");
+            ToggleSection("Шаблоны");await Task.Delay(100);Check(visible.Count==1&&visible[0].Clip.Template,"side section switches to templates without duplicated panels");
+            ToggleSection("Шаблоны");Check(!sectionPopup.IsOpen,"clicking the active section closes its panel");
+            ToggleSection("Сегодня");await Task.Delay(150);
+            hovered=visible.First(v=>v.Clip.Kind=="text").Clip;hoverAnchor=visible.First(v=>v.Clip.Id==hovered.Id).Row;ShowPreview();await Task.Delay(150);
+            Check(preview.IsOpen,"preview works for a clip inside the side panel");hovered=null;preview.IsOpen=false;
+            store.Set("sectionlayout","inline");Render();Check(visible.Count==6&&!sectionPopup.IsOpen,"inline preference restores the full list");
+            Check(updateClient is null&&!updateTimer.IsEnabled,"isolated UI never checks or installs internet updates");
             Search.Text="EXAMPLE";
             await Task.Delay(100);
             Check(visible.Count==2&&visible.All(v=>v.Clip.Kind=="text"),"case insensitive text search across templates and history");
@@ -22,7 +31,7 @@ public sealed partial class MainWindow
             Check(Groups.Children.Count==1&&Groups.Children[0] is Microsoft.UI.Xaml.Controls.TextBlock,"empty search shows one message and no section headings");
             Search.Text="";
             await Task.Delay(100);
-            Check(visible.Count==6&&selected==0,"clearing search restores rows and selection");
+            Check(visible.Count==6&&selected>=0&&selected<visible.Count,"clearing search restores rows and valid selection");
             long id=visible.First(v=>!v.Clip.Template&&v.Clip.Kind=="text").Clip.Id;
             store.Template(id,true);Render();
             Check(visible.Count(v=>v.Clip.Id==id)==1&&visible.First(v=>v.Clip.Id==id).Clip.Template,"moving to templates does not duplicate rows");
@@ -54,7 +63,7 @@ public sealed partial class MainWindow
             ShowPreview();for(int attempt=0;attempt<20&&Status.Text=="";attempt++)await Task.Delay(100);
             Check(!preview.IsOpen&&Status.Text.Contains("предпросмотр"),"invalid image preview reports error without crashing");
             var help=CreateHelpDialog();var helpTask=help.ShowAsync();await Task.Delay(150);
-            Check(help.Content is Microsoft.UI.Xaml.Controls.TextBlock helpText&&helpText.Text=="Я верю в тебя, ты разберёшься сам.","help displays the agreed Russian instruction");
+            Check(help.Content is Microsoft.UI.Xaml.Controls.ScrollViewer helpScroll&&helpScroll.Content is Microsoft.UI.Xaml.Controls.TextBlock helpText&&helpText.Text.Contains("Alt+F1")&&helpText.Text.Contains("Микрофон")&&helpText.Text.Contains("Обновления с GitHub")&&!helpText.Text.Contains("Я верю"),"help lists implemented features and current shortcuts without jokes");
             help.Hide();await helpTask;
             store.Add("text","Настройки");Render();long untranslated=store.All().First(c=>c.Text=="Настройки").Id;
             store.Set("language","en");ApplyLanguage();Render();

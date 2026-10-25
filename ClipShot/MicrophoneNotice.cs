@@ -11,7 +11,7 @@ internal sealed class MicrophoneNotice : Window
 {
     private readonly DispatcherTimer timer=new(){Interval=TimeSpan.FromMilliseconds(1900)};
     private readonly Storyboard entrance=new();
-    internal MicrophoneNotice(string text,string detail,MicrophoneState state,bool preview=false)
+    internal MicrophoneNotice(string text,string detail,MicrophoneState state,bool preview=false,bool appNotice=false)
     {
         Title="ClipShot — статус микрофона";var hwnd=WinRT.Interop.WindowNative.GetWindowHandle(this);
         Native.SetWindowLongPtr(hwnd,-20,(nint)((long)Native.GetWindowLongPtr(hwnd,-20)|0x08000080L));
@@ -44,6 +44,7 @@ internal sealed class MicrophoneNotice : Window
         var cradle=new Microsoft.UI.Xaml.Shapes.Path{Stroke=ink,StrokeThickness=3.5,Data=new PathGeometry{Figures={new PathFigure{StartPoint=new Point(20,35),Segments={new BezierSegment{Point1=new Point(20,59),Point2=new Point(46,59),Point3=new Point(46,35)}}}}}};emblem.Children.Add(cradle);
         Line(33,53,33,62);Line(25,62,41,62);
         if(state==MicrophoneState.Muted){Line(17,18,49,57,7);emblem.Children.Add(new Line{X1=17,Y1=18,X2=49,Y2=57,Stroke=white,StrokeThickness=2});}
+        if(appNotice){emblem.Children.Clear();emblem.Children.Add(new Image{Source=new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri("ms-appx:///Assets/ClipShot.png")),Width=66,Height=75,Stretch=Stretch.Uniform});}
         var copy=new StackPanel{Width=334,Spacing=5,RenderTransform=new TranslateTransform()};Canvas.SetLeft(copy,100);Canvas.SetTop(copy,23);canvas.Children.Add(copy);
         var brand=new TextBlock{Text="CLIPSHOT",FontFamily=new FontFamily("Bahnschrift"),FontSize=11,CharacterSpacing=240,Foreground=accent};copy.Children.Add(brand);
         copy.Children.Add(new TextBlock{Text=text.ToUpperInvariant(),FontFamily=new FontFamily("Bahnschrift SemiCondensed"),FontWeight=Microsoft.UI.Text.FontWeights.Bold,FontSize=23,Foreground=white,TextWrapping=TextWrapping.Wrap,MaxLines=2,TextTrimming=TextTrimming.CharacterEllipsis});
@@ -63,7 +64,17 @@ internal sealed class MicrophoneNotice : Window
         }
         Animate("Opacity",0,1);Animate("(UIElement.RenderTransform).(TranslateTransform.X)",14,0);
         canvas.Loaded+=(_,_)=>entrance.Begin();
-        timer.Tick+=(_,_)=>Close();Closed+=(_,_)=>{timer.Stop();entrance.Stop();};AppWindow.Show(false);if(!preview)timer.Start();
+        if(appNotice)
+        {
+            Native.SetWindowLongPtr(hwnd,-20,(nint)((long)Native.GetWindowLongPtr(hwnd,-20)|0x80000L));Native.SetLayeredWindowAttributes(hwnd,0,255,2);
+            Native.GetCursorPos(out var initialMouse);var clock=System.Diagnostics.Stopwatch.StartNew();var lifetime=new NoticeLifetime();timer.Interval=TimeSpan.FromMilliseconds(40);
+            timer.Tick+=(_,_)=>
+            {
+                bool moved=Native.GetCursorPos(out var mouse)&&Math.Abs(mouse.X-initialMouse.X)+Math.Abs(mouse.Y-initialMouse.Y)>=3;
+                byte alpha=lifetime.Opacity(clock.Elapsed,moved);if(alpha==0){Close();return;}Native.SetLayeredWindowAttributes(hwnd,0,alpha,2);
+            };
+        }
+        else timer.Tick+=(_,_)=>Close();Closed+=(_,_)=>{timer.Stop();entrance.Stop();};AppWindow.Show(false);if(!preview)timer.Start();
     }
     private static SolidColorBrush Brush(byte r,byte g,byte b)=>new(Windows.UI.Color.FromArgb(255,r,g,b));
 }

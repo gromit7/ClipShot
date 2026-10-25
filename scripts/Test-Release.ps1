@@ -1,4 +1,4 @@
-﻿param([string]$MakeNsis,[switch]$SkipBuild,[switch]$SkipDesktop,[switch]$PublishInstaller)
+param([string]$MakeNsis,[switch]$SkipBuild,[switch]$SkipDesktop,[switch]$PublishInstaller)
 $ErrorActionPreference='Stop'
 $repo=Split-Path $PSScriptRoot
 $reports=Join-Path $repo 'TestResults'
@@ -22,7 +22,7 @@ try{
     $project=[xml](Get-Content -LiteralPath (Join-Path $repo 'ClipShot/ClipShot.csproj') -Raw)
     $version=[string]$project.Project.PropertyGroup.Version
     Step 'Publication contents and version' {
-        foreach($name in 'ClipShot.exe','ClipShot.dll','ClipShot.pri','ClipShot.runtimeconfig.json','LICENSE','Assets/ClipShot.ico','Assets/ClipShot.Muted.ico','Assets/ClipShot.png','Assets/Selection.cur'){
+        foreach($name in 'ClipShot.exe','ClipShot.dll','ClipShot.pri','ClipShot.runtimeconfig.json','Updater/ClipShot.Updater.exe','FileInventory.json','LICENSE','Assets/ClipShot.ico','Assets/ClipShot.Muted.ico','Assets/ClipShot.png','Assets/Selection.cur'){
             if(-not(Test-Path -LiteralPath (Join-Path $publication $name))){throw "Missing $name"}
         }
         if((Get-Item -LiteralPath $app).VersionInfo.ProductVersion.Split('+')[0] -ne $version){throw 'Wrong published version'}
@@ -94,7 +94,33 @@ try{
                 if((Get-Content -LiteralPath $ready -Raw) -notmatch '^PASS preserved'){throw 'User data did not survive upgrade'}
                 if((Get-FileHash -LiteralPath $installedApp).Hash -ne (Get-FileHash -LiteralPath $app).Hash){throw 'Installed binary differs from publication'}
                 Copy-Item -LiteralPath $ready -Destination (Join-Path $reports 'upgrade-checks.txt') -Force
-                $database=Join-Path $env:CLIPSHOT_TEST_ROOT 'clips.db'
+                # Exercise the actual external updater in an explicit sandbox. Its fallback may
+                # never launch a normal app or send a production shutdown message in this mode.
+                $updates=Join-Path $sandbox 'Updates';New-Item -ItemType Directory -Path $updates -Force | Out-Null
+                $updateInstaller=Join-Path $updates ([IO.Path]::GetFileName($setup));Copy-Item -LiteralPath $setup -Destination $updateInstaller
+                $runner=Join-Path $updates 'ClipShot.Updater.exe';Copy-Item -LiteralPath (Join-Path $publication 'Updater/ClipShot.Updater.exe') -Destination $runner
+                $licensePath=Join-Path $installDir 'LICENSE';Set-Content -LiteralPath $licensePath -Value 'synthetic rollback marker'
+                $updateHash=(Get-FileHash -LiteralPath $updateInstaller).Hash
+                $updaterArgs='"'+$updateInstaller+'" "'+$updateHash+'" "'+$installedApp+'" "--test-root='+$sandbox+'"'
+                Process-Checked $runner $updaterArgs 180000
+                if((Get-Content -LiteralPath $ready -Raw) -notmatch '^PASS preserved'){throw 'External updater did not restart and preserve isolated state'}
+                Copy-Item -LiteralPath $ready -Destination (Join-Path $reports 'updater-restart-checks.txt') -Force
+                if((Get-Content -LiteralPath $licensePath -Raw) -notmatch 'MIT License'){throw 'Updater did not replace the old shipped file'}
+                $snapshot=Get-ChildItem -LiteralPath $updates -Directory -Filter 'backup-*' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+                $rollbackArgs='--rollback "'+$snapshot.FullName+'" "'+$installedApp+'" "--test-root='+$sandbox+'"'
+                Process-Checked $runner $rollbackArgs 120000
+                if((Get-Content -LiteralPath $licensePath -Raw) -notmatch 'synthetic rollback marker'){throw 'Rollback did not restore the previous shipped file'}
+                if((Get-Content -LiteralPath $ready -Raw) -notmatch '^PASS preserved'){throw 'Rollback changed user data'}
+                $badInstaller=Join-Path $updates 'ClipShot-Setup-99.0.0.exe';[IO.File]::WriteAllBytes($badInstaller,[byte[]]::new(2048))
+                $badHash=(Get-FileHash -LiteralPath $badInstaller).Hash
+                $badArgs='"'+$badInstaller+'" "'+$badHash+'" "'+$installedApp+'" "--test-root='+$sandbox+'"'
+                $failed=Start-Process -FilePath $runner -ArgumentList $badArgs -PassThru -WindowStyle Hidden
+                if(-not $failed.WaitForExit(120000)){throw 'Failed update recovery timed out'}
+                if($failed.ExitCode -ne 1){throw 'Invalid executable was not rejected'}
+                if((Get-Content -LiteralPath $ready -Raw) -notmatch '^PASS preserved'){throw 'Failed update did not recover the application'}
+                Set-Content -LiteralPath (Join-Path $reports 'updater-rollback-checks.txt') -Value 'PASS update restart, rollback file restoration, failed package recovery and preserved synthetic database'
+
+                $database=Join-Path $env:CLIPSHOT_TEST_ROOT 'clips.db' 
                 $before=(Get-FileHash -LiteralPath $database).Hash
                 $unrelated=Join-Path $installDir 'not-shipped-by-installer.txt'
                 Set-Content -LiteralPath $unrelated -Value 'synthetic unrelated file'

@@ -70,14 +70,15 @@ public sealed partial class MainWindow : Window
             else if(store.Get("startup","0")=="1")
             {try{SetStartup(true);}catch{Status.Text=T("Не удалось обновить путь автозапуска.");}}
         }
-        if(!isolated||shellTest){RegisterKey();RegisterScreenshotKey();CreateTray();}
-        StartMicrophone();ApplyTheme(); Root.ActualThemeChanged+=(_,_)=>{StyleTitleBar();Render();}; Prune(); Render();
+        if(!isolated||shellTest){RegisterKey();RegisterScreenshotKey();RegisterScreenshotAlias();CreateTray();}
+        StartMicrophone();StartUpdates();ApplyTheme(); Root.ActualThemeChanged+=(_,_)=>{StyleTitleBar();Render();}; Prune(); Render();
         Root.AddHandler(UIElement.KeyDownEvent,new KeyEventHandler(RootKeyDown),true);
         hoverTimer.Tick+=(_,_)=>{hoverTimer.Stop();ShowPreview();};
         leaveTimer.Tick+=(_,_)=>{leaveTimer.Stop();if(!overPreview&&hovered==null)preview.IsOpen=false;};
         cleanupTimer.Tick+=(_,_)=>{Prune();Render();}; cleanupTimer.Start();
         AppWindow.Closing+=(_,e)=>{ if(!exiting){e.Cancel=true;Hide();} };
         AppWindow.Changed+=(_,e)=> { if(!exiting&&e.DidSizeChange && AppWindow.Size.Width>0){ store.Set("width",AppWindow.Size.Width.ToString());store.Set("height",AppWindow.Size.Height.ToString()); } };
+        Root.Loaded+=(_,_)=>PositionSection();AppWindow.Changed+=(_,_)=>{if(!exiting)PositionSection();};
         if(isolated) SeedSmoke();
     }
     private void Prune()=>store.Prune(AppSettings.RetentionDays(store.Get("days","90")));
@@ -100,6 +101,12 @@ public sealed partial class MainWindow : Window
         trayReady=ok;sharedTraySignature=TraySignature;if(old!=0)Native.DestroyIcon(old);
         if(!trayReady)Status.Text=T("Не удалось добавить значок в трей. Перезапустите приложение.");
     }
+    private void RegisterScreenshotAlias()
+    {
+        Native.UnregisterHotKey(hwnd,4);
+        if(store.Get("shiftprint","1")=="1"&&!Native.RegisterHotKey(hwnd,4,Win32Hotkey.NoRepeat|Win32Hotkey.Shift,Win32Hotkey.PrintScreen))
+            Status.Text=T("Shift+PrintScreen занято другой программой. Основное сочетание снимка остаётся доступным.");
+    }
     private nint WindowMessage(nint h,uint msg,nint w,nint l)
     {
         if(msg==0x0112&&((long)w&0xFFF0)==0xF020){DispatcherQueue.TryEnqueue(Hide);return 0;}
@@ -111,7 +118,7 @@ public sealed partial class MainWindow : Window
         if(msg==0x0312)
         {
             if((int)w==3){DispatcherQueue.TryEnqueue(()=>RefreshMicrophone(true));return 0;}
-            if((int)w==2){screenshotHotkeyCount++;DispatcherQueue.TryEnqueue(()=>TakeScreenshot());}
+            if((int)w is 2 or 4){screenshotHotkeyCount++;DispatcherQueue.TryEnqueue(()=>TakeScreenshot());}
             else {historyHotkeyCount++;DispatcherQueue.TryEnqueue(ShowNearCursor);}
             if(shellTest)WriteShellReport();return 0;
         }
@@ -139,17 +146,17 @@ public sealed partial class MainWindow : Window
         var area=DisplayArea.GetFromPoint(new PointInt32(p.X,p.Y),DisplayAreaFallback.Nearest).WorkArea;
         int x=Math.Clamp(p.X+12,area.X,Math.Max(area.X,area.X+area.Width-AppWindow.Size.Width));
         int y=Math.Clamp(p.Y+12,area.Y,Math.Max(area.Y,area.Y+area.Height-AppWindow.Size.Height));
-        AppWindow.Move(new PointInt32(x,y));AppWindow.Show();Activate();Native.SetForegroundWindow(hwnd);Search.Focus(FocusState.Programmatic);
+        AppWindow.Move(new PointInt32(x,y));AppWindow.Show();Activate();Native.SetForegroundWindow(hwnd);Search.Focus(FocusState.Programmatic);PositionSection();ShowUpdateOffer();
     }
-    private void Hide(){preview.IsOpen=false;hoverTimer.Stop();AppWindow.Hide();Search.Text="";}
+    private void Hide(){sectionPopup.IsOpen=false;preview.IsOpen=false;hoverTimer.Stop();AppWindow.Hide();Search.Text="";}
     private void Quit()
     {
         if(exiting)return;
-        exiting=true;StopMicrophone();hoverTimer.Stop();leaveTimer.Stop();cleanupTimer.Stop();
+        exiting=true;sectionPopup.IsOpen=false;StopUpdates();StopMicrophone();hoverTimer.Stop();leaveTimer.Stop();cleanupTimer.Stop();
         captureWindow?.Cancel();
         editor?.Close();
         if(!isolated)Native.RemoveClipboardFormatListener(hwnd);
-        if(!isolated||shellTest){Native.UnregisterHotKey(hwnd,1);Native.UnregisterHotKey(hwnd,2);Native.Shell_NotifyIcon(2,ref tray);if(tray.Icon!=0)Native.DestroyIcon(tray.Icon);}
+        if(!isolated||shellTest){Native.UnregisterHotKey(hwnd,1);Native.UnregisterHotKey(hwnd,2);Native.UnregisterHotKey(hwnd,4);Native.Shell_NotifyIcon(2,ref tray);if(tray.Icon!=0)Native.DestroyIcon(tray.Icon);}
         Native.SetWindowLongPtr(hwnd,-4,previous);store.Dispose();Close();Application.Current.Exit();
     }
     private async void TakeScreenshot()
@@ -250,6 +257,7 @@ public sealed partial class MainWindow : Window
             var groups=HistoryView.Groups(store.All(),query,store.Get("templateorder",""),DateTime.Today);
             foreach(var group in groups)AddGroup(group.Title,group.Clips,query.Length>0);
             if(groups.All(g=>g.Clips.Count==0))Groups.Children.Add(new TextBlock{Text=T(query.Length>0?"Ничего не найдено":"Скопируйте текст или картинку — они появятся здесь."),TextWrapping=TextWrapping.Wrap,Margin=new Thickness(8,24,8,8),Opacity=.65});
+            RenderSideSection(groups);
             selected=previousId.HasValue?visible.FindIndex(v=>v.Clip.Id==previousId):-1;
             if(selected<0&&visible.Count>0)selected=0;Highlight();
         }
@@ -258,15 +266,15 @@ public sealed partial class MainWindow : Window
     private void AddGroup(string title,List<Clip> clips,bool searching)
     {
         if(clips.Count==0)return;
-        bool open=searching||expanded.GetValueOrDefault(title);
+        bool open=buildingSection||searching||(SideSections?activeSection==title:expanded.GetValueOrDefault(title));
         var heading=new Grid{ColumnSpacing=10};heading.ColumnDefinitions.Add(new(){Width=new GridLength(14)});heading.ColumnDefinitions.Add(new(){Width=new GridLength(20)});heading.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});heading.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
         var arrow=new FontIcon{Glyph=open?"\uE70D":"\uE76C",FontSize=11};heading.Children.Add(arrow);
         if(title is "Шаблоны" or "Сегодня"){var icon=new FontIcon{Glyph=title=="Шаблоны"?"\uE8A5":"\uE823",FontSize=18,Foreground=ClipBrush("ClipSecondaryBrush")};Grid.SetColumn(icon,1);heading.Children.Add(icon);}
         var label=new TextBlock{Text=T(title),FontSize=12,CharacterSpacing=30,FontWeight=Microsoft.UI.Text.FontWeights.SemiBold};Grid.SetColumn(label,2);heading.Children.Add(label);
         var count=new TextBlock{Text=clips.Count.ToString(),FontSize=11,Foreground=ClipBrush("ClipSecondaryBrush")};Grid.SetColumn(count,3);heading.Children.Add(count);
         var button=new Button{Content=heading,Height=40,CornerRadius=new CornerRadius(0),HorizontalAlignment=HorizontalAlignment.Stretch,HorizontalContentAlignment=HorizontalAlignment.Stretch,Background=ClipBrush("ClipHeaderBrush"),BorderThickness=new Thickness(0),Padding=new Thickness(18,0,20,0)};
-        button.Click+=(_,_)=>{expanded[title]=!open;Render();};Groups.Children.Add(new Border{Child=button,BorderBrush=ClipBrush("ClipSeparatorBrush"),BorderThickness=new Thickness(0,0,0,1)});
-        if(!open)return;
+        button.Click+=(_,_)=>ToggleSection(title);ClipRows.Children.Add(new Border{Child=button,BorderBrush=ClipBrush("ClipSeparatorBrush"),BorderThickness=new Thickness(0,0,0,1)});
+        if(!open||SideSections&&!buildingSection)return;
         foreach(var clip in clips)
         {
             var grid=new Grid{ColumnSpacing=12,Margin=new Thickness(20,10,20,10),MinHeight=30};grid.ColumnDefinitions.Add(new(){Width=new GridLength(clip.Image is null?26:76)});grid.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});grid.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
@@ -290,7 +298,7 @@ public sealed partial class MainWindow : Window
             var indicator=new Border{Width=3,Height=28,CornerRadius=new CornerRadius(2),Background=ClipBrush("ClipIndicatorBrush"),HorizontalAlignment=HorizontalAlignment.Left,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(3,0,0,0),Visibility=Visibility.Collapsed};
             var contents=new Grid();contents.Children.Add(grid);contents.Children.Add(indicator);
             var row=new Border{Child=contents,Tag=indicator,BorderBrush=ClipBrush("ClipSeparatorBrush"),BorderThickness=new Thickness(0,0,0,1),Background=new SolidColorBrush(Microsoft.UI.Colors.Transparent)};
-            int index=visible.Count;visible.Add((clip,row));Groups.Children.Add(row);
+            int index=visible.Count;visible.Add((clip,row));ClipRows.Children.Add(row);
             row.Tapped+=async(_,e)=>{if(!IsButtonSource(e.OriginalSource))await Copy(clip);};
             row.PointerEntered+=(_,_)=>{selected=index;Highlight();hovered=clip;hoverAnchor=row;hoverTimer.Stop();hoverTimer.Start();};
             row.PointerExited+=(_,_)=>{hoverTimer.Stop();hovered=null;leaveTimer.Start();};
@@ -343,11 +351,20 @@ public sealed partial class MainWindow : Window
         var border=new Border{Child=body,Padding=new Thickness(16),CornerRadius=new CornerRadius(activeTheme.Corner),BorderThickness=new Thickness(1),RequestedTheme=Root.ActualTheme,Background=ClipBrush("ClipSearchBrush"),BorderBrush=ClipBrush("ClipSeparatorBrush")};
         preview.Child=border;preview.XamlRoot=Root.XamlRoot;
         double scale=Root.XamlRoot.RasterizationScale;
-        var point=anchor.TransformToVisual(Root).TransformPoint(new Windows.Foundation.Point(0,0));
+        bool fromSide=sectionRows.Children.Contains(anchor)&&sectionBorder is not null;
+        var point=anchor.TransformToVisual(fromSide?sectionBorder!:Root).TransformPoint(new Windows.Foundation.Point(0,0));
+        if(fromSide)point=new Windows.Foundation.Point(point.X+sectionPopup.HorizontalOffset,point.Y+sectionPopup.VerticalOffset);
         var area=DisplayArea.GetFromWindowId(AppWindow.Id,DisplayAreaFallback.Nearest).WorkArea;
         double width=432,height=clip.Image is null?Math.Min(480,80+clip.Text.Length/45*20):500;
         double right=AppWindow.Position.X+(Root.ActualWidth+width+12)*scale;
         preview.HorizontalOffset=right<=area.X+area.Width?Root.ActualWidth+8:-width-8;
+        if(fromSide)
+        {
+            var origin=new Native.Point();Native.ClientToScreen(hwnd,ref origin);
+            double wanted=point.X+anchor.ActualWidth+8;
+            if(origin.X+(wanted+width)*scale>area.X+area.Width)wanted=point.X-width-8;
+            preview.HorizontalOffset=Math.Clamp(wanted,(area.X-origin.X)/scale,Math.Max((area.X-origin.X)/scale,(area.X+area.Width-origin.X)/scale-width));
+        }
         preview.VerticalOffset=Math.Max(0,Math.Min(point.Y,(area.Y+area.Height-AppWindow.Position.Y)/scale-height-40));
         preview.IsOpen=true;
         Search.Focus(FocusState.Programmatic);
@@ -389,6 +406,9 @@ public sealed partial class MainWindow : Window
         if(dialogOpen||exiting)return;
         preview.IsOpen=false;
         var panel=new StackPanel{Spacing=12,MinWidth=320};
+        var automaticUpdates=new CheckBox{Content=T("Проверять обновления автоматически"),IsChecked=store.Get("updatecheck","1")=="1"};panel.Children.Add(automaticUpdates);
+        var checkUpdates=new Button{Content=T("Проверить обновления")};checkUpdates.Click+=async(_,_)=>await CheckUpdates(true);panel.Children.Add(checkUpdates);
+        var sectionLayout=new ComboBox{Header=T("Раскрытие разделов"),HorizontalAlignment=HorizontalAlignment.Stretch};sectionLayout.Items.Add(T("Вбок, где больше места"));sectionLayout.Items.Add(T("Внутри списка"));sectionLayout.SelectedIndex=store.Get("sectionlayout","side")=="inline"?1:0;panel.Children.Add(sectionLayout);
         var days=new ComboBox{Header=T("Хранить историю"),HorizontalAlignment=HorizontalAlignment.Stretch};foreach(var s in new[]{"30 дней","90 дней","Бессрочно"})days.Items.Add(T(s));days.SelectedIndex=store.Get("days","90") switch{"30"=>0,"0"=>2,_=>1};panel.Children.Add(days);
         var theme=new ComboBox{Header=T("Тема"),HorizontalAlignment=HorizontalAlignment.Stretch};foreach(var item in AppThemes.All)theme.Items.Add(T(item.Name));theme.SelectedIndex=AppThemes.All.ToList().FindIndex(t=>t.Id==activeTheme.Id);panel.Children.Add(theme);
         ComboBox HotkeyCombo(string header,string keyName,string ctrlName,int fallback)
@@ -399,6 +419,7 @@ public sealed partial class MainWindow : Window
         }
         var keys=HotkeyCombo("Открыть историю","key","ctrl",112);panel.Children.Add(keys);
         var shotKeys=HotkeyCombo("Снимок выделенной области","shotkey","shotctrl",113);panel.Children.Add(shotKeys);
+        var shiftPrint=new CheckBox{Content=T("Также Shift+PrintScreen — снимок области"),IsChecked=store.Get("shiftprint","1")=="1"};panel.Children.Add(shiftPrint);
         var keyError=new TextBlock{TextWrapping=TextWrapping.Wrap,MaxWidth=340};panel.Children.Add(keyError);
         var startup=new CheckBox{Content=T("Запускать с Windows"),IsChecked=store.Get("startup","1")=="1"};panel.Children.Add(startup);
         var autopaste=new CheckBox{Content=T("Вставлять в предыдущее приложение"),IsChecked=store.Get("autopaste","0")=="1"};panel.Children.Add(autopaste);
@@ -429,12 +450,16 @@ public sealed partial class MainWindow : Window
         };
         dialogOpen=true;var result=await dialog.ShowAsync();dialogOpen=false;
         if(result!=ContentDialogResult.Primary)return;
+        store.Set("shiftprint",shiftPrint.IsChecked==true?"1":"0");if(!isolated)RegisterScreenshotAlias();
+        store.Set("sectionlayout",sectionLayout.SelectedIndex==1?"inline":"side");
+        store.Set("updatecheck",automaticUpdates.IsChecked==true?"1":"0");
         store.Set("days",days.SelectedIndex switch{0=>"30",2=>"0",_=>"90"});store.Set("theme",AppThemes.All[Math.Max(0,theme.SelectedIndex)].Id);
         try{if(!isolated)SetStartup(startup.IsChecked==true);store.Set("startup",startup.IsChecked==true?"1":"0");}catch{Status.Text=T("Не удалось изменить автозапуск.");}
         store.Set("autopaste",autopaste.IsChecked==true?"1":"0");store.Set("language",language.SelectedIndex==1?"en":"ru");ApplyLanguage();saveMicrophoneSettings();if(wantsClear)store.Clear();ApplyTheme();Prune();Render();
     }
     private async void SeedSmoke()
     {
+        if(!Environment.GetCommandLineArgs().Contains("--side-demo"))store.Set("sectionlayout","inline");
         if(Environment.GetCommandLineArgs().Contains("--upgrade-self-test")){RunUpgradeChecks();return;}
         if(Environment.GetCommandLineArgs().Contains("--light"))store.Set("theme","White");
         if(Environment.GetCommandLineArgs().Contains("--dark"))store.Set("theme","Dark");
@@ -456,6 +481,7 @@ public sealed partial class MainWindow : Window
         {await RunCaptureChecks(Environment.GetCommandLineArgs().Contains("--capture-demo"));return;}
         if(Environment.GetCommandLineArgs().Contains("--demo"))
         {
+            if(Environment.GetCommandLineArgs().Contains("--install-preview"))installationNotice=new MicrophoneNotice("ClipShot обновлён","Работает в трее · Alt+F1 — история",MicrophoneState.Enabled,true,true);
             if(Environment.GetCommandLineArgs().Contains("--microphone-preview"))
             {
                 var stateArg=Environment.GetCommandLineArgs().FirstOrDefault(a=>a.StartsWith("--microphone-state="));

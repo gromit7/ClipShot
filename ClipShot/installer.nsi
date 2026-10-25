@@ -5,9 +5,10 @@
 !include "WinVer.nsh"
 !include "FileFunc.nsh"
 !ifndef VERSION
-!define VERSION "0.6.2"
+!define VERSION "0.7.0"
 !endif
 Var TestRoot
+Var InstallResult
 Name "ClipShot"
 OutFile "..\ClipShot-Setup-${VERSION}.exe"
 InstallDir "$LOCALAPPDATA\Programs\ClipShot"
@@ -30,6 +31,7 @@ LangString InstallerWelcomeText 1049 "Мастер установит ClipShot �
 !define MUI_WELCOMEPAGE_TITLE "$(InstallerWelcomeTitle)"
 !define MUI_WELCOMEPAGE_TEXT "$(InstallerWelcomeText)"
 !define MUI_FINISHPAGE_RUN "$INSTDIR\ClipShot.exe"
+!define MUI_FINISHPAGE_RUN_PARAMETERS "--background --install-result=$InstallResult"
 !define MUI_FINISHPAGE_RUN_TEXT "Запустить ClipShot"
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_COMPONENTS
@@ -42,6 +44,11 @@ LangString InstallerWelcomeText 1049 "Мастер установит ClipShot �
 
 Function .onInit
   SetShellVarContext current
+  StrCpy $InstallResult "installed"
+  IfFileExists "$INSTDIR\ClipShot.exe" 0 +2
+    StrCpy $InstallResult "updated"
+  IfFileExists "$INSTDIR\ClipNest.exe" 0 +2
+    StrCpy $InstallResult "updated"
   ${GetParameters} $0
   ${GetOptions} $0 "/TESTROOT=" $TestRoot
   ${If} $TestRoot != ""

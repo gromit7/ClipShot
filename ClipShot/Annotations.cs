@@ -29,6 +29,12 @@ public static class AnnotationGeometry
         double projected=dx*Math.Cos(snapped)+dy*Math.Sin(snapped);
         return new(start.X+projected*Math.Cos(snapped),start.Y+projected*Math.Sin(snapped));
     }
+    public static (ImagePoint Start,ImagePoint End) AimArrow(ImagePoint start,ImagePoint target,bool force=false,double tolerance=3)
+    {
+        var snapped=SnapArrow(start,target,force);double dx=target.X-snapped.X,dy=target.Y-snapped.Y;
+        if(!force&&Math.Sqrt(dx*dx+dy*dy)>tolerance)return(start,target);
+        return(new(start.X+dx,start.Y+dy),target);
+    }
     public static ImagePoint[] ArrowHead(Annotation mark)
     {
         double angle=Math.Atan2(mark.End.Y-mark.Start.Y,mark.End.X-mark.Start.X);

@@ -44,6 +44,13 @@
   <ScrollViewer x:Name="HistoryScroll" Grid.Row="2" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"><StackPanel x:Name="Groups" Spacing="0"/></ScrollViewer>
   <Border x:Name="FooterSurface" Grid.Row="3" Padding="16,12,12,12" Background="{ThemeResource ClipHeaderBrush}" BorderBrush="{ThemeResource ClipSeparatorBrush}" BorderThickness="0,1,0,0">
    <StackPanel Spacing="9">
+    <Border x:Name="UpdateNotice" Visibility="Collapsed" Background="{ThemeResource ClipSearchBrush}" Padding="8" CornerRadius="4">
+     <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <TextBlock x:Name="UpdateText" TextWrapping="Wrap" FontSize="12" VerticalAlignment="Center"/>
+      <Button x:Name="UpdateInstall" Grid.Column="1" Content="Обновить сейчас" Click="InstallUpdateClick" FontSize="12" Padding="8,4"/>
+      <Button Grid.Column="2" Content="×" Click="DismissUpdate" ToolTipService.ToolTip="Позже" Padding="6,4"/>
+     </Grid>
+    </Border>
     <TextBlock x:Name="Status" Text="" Visibility="Collapsed" FontSize="12" TextWrapping="Wrap"/>
     <StackPanel Orientation="Horizontal" Spacing="14">
      <StackPanel Orientation="Horizontal" Spacing="6"><Border BorderBrush="{ThemeResource ClipSeparatorBrush}" BorderThickness="1" CornerRadius="3" Padding="5,2"><TextBlock Text="↑↓" FontSize="12"/></Border><TextBlock x:Name="SelectHint" Text="Выбрать" FontSize="11" Foreground="{ThemeResource ClipSecondaryBrush}" VerticalAlignment="Center"/></StackPanel>

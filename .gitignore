@@ -7,8 +7,10 @@
 !/LICENSE.ru.md
 !/CONTRIBUTING.md
 !/global.json
+!/update-policy.json
 !/ClipShot/
 !/ClipShot.Checks/
+!/ClipShot.Updater/
 !/scripts/
 !/docs/
 !/.github/

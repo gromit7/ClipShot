@@ -4,9 +4,23 @@ using Microsoft.UI.Xaml.Controls;
 namespace ClipShot;
 public sealed partial class MainWindow
 {
+    private string HelpText=>string.Join("\n\n",new[]{
+        "• "+Win32Hotkey.Describe(AppSettings.FunctionKey(store.Get("key","112"),112),store.Get("ctrl","0")=="1")+" — "+T("история рядом с курсором; поиск по тексту, выбор мышью или клавишами."),
+        "• "+T("Текст и картинки: история по дням, без дублей, увеличенный просмотр при наведении."),
+        "• "+T("Шаблоны: Ctrl+S сохраняет выбранный клип; изменение текста и порядка. Очистка истории их не удаляет."),
+        "• "+T("Выбор клипа копирует его и оставляет окно открытым. Автовставка в предыдущее приложение — в настройках."),
+        "• "+Win32Hotkey.Describe(AppSettings.FunctionKey(store.Get("shotkey","113"),113),store.Get("shotctrl","0")=="1")+(store.Get("shiftprint","1")=="1"?" / Shift+PrintScreen":"")+" — "+T("снимок выделенной области в буфер и историю; Esc отменяет."),
+        "• "+T("Редактор снимка: стрелка с выравниванием, рамка, текст, мозаика, скрытие области, отмена и повтор, копирование и PNG."),
+        "• "+T("Микрофон: переключение клавиатурой или боковой кнопкой мыши; основной, все или выбранные устройства. Состояние — на значке в трее и короткой плашке."),
+        "• "+T("Разделы раскрываются в сторону свободного места; обычный список можно вернуть в настройках. Пустые разделы скрыты."),
+        "• "+T("Семь тем: градиентная, прозрачная, белая, чёрная, тёмная, Windows 98 и Windows XP."),
+        "• "+T("Хранение истории: 30 дней, 90 дней или бессрочно; ручная очистка. Данные остаются на этом ПК."),
+        "• "+T("Запуск с Windows, работа в трее, настройка горячих клавиш. Крестик, сворачивание и Esc скрывают окно; выход — в меню трея."),
+        "• "+T("Обновления с GitHub: проверка в фоне, установка по нажатию, сохранение данных, восстановление при ошибке и аварийный откат версии."),
+        "• "+T("Русский язык по умолчанию; English и ссылка на открытый исходный код — в настройках.")});
     private ContentDialog CreateHelpDialog()=>new()
     {
-        Title=T("Справка"),Content=new TextBlock{Text=T("Я верю в тебя, ты разберёшься сам."),TextWrapping=TextWrapping.Wrap,MaxWidth=340},
+        Title=T("Возможности ClipShot"),Content=new ScrollViewer{MaxHeight=460,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Content=new TextBlock{Text=HelpText,TextWrapping=TextWrapping.Wrap,MaxWidth=440,FontSize=14}},
         CloseButtonText=T("Понятно"),DefaultButton=ContentDialogButton.Close,XamlRoot=Root.XamlRoot,RequestedTheme=Root.RequestedTheme
     };
     private async void HelpClick(object sender,RoutedEventArgs e)

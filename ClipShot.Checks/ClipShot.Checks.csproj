@@ -6,6 +6,7 @@
   <Compile Include="../ClipShot/AppTheme.cs" Link="AppTheme.cs"/>
   <None Include="../ClipShot/Assets/ClipShot.Muted.ico" Link="Assets/ClipShot.Muted.ico" CopyToOutputDirectory="PreserveNewest"/><None Include="../ClipShot/Assets/ClipShot.ico" Link="Assets/ClipShot.ico" CopyToOutputDirectory="PreserveNewest"/><Compile Include="../ClipShot/TrayIconRenderer.cs" Link="TrayIconRenderer.cs"/>
   <Compile Include="../ClipShot/Microphones.cs" Link="Microphones.cs"/><Compile Include="../ClipShot/CoreAudioMicrophones.cs" Link="CoreAudioMicrophones.cs"/>
+  <Compile Include="../ClipShot/NoticeLifetime.cs" Link="NoticeLifetime.cs"/><Compile Include="../ClipShot/SidePanelPlacement.cs" Link="SidePanelPlacement.cs"/><Compile Include="../ClipShot/Updates.cs" Link="Updates.cs"/>
   <Compile Include="../ClipShot/UiText.cs" Link="UiText.cs"/>
   <Compile Include="../ClipShot/Annotations.cs" Link="Annotations.cs"/><Compile Include="../ClipShot/AnnotationRenderer.cs" Link="AnnotationRenderer.cs"/>
   <PackageReference Include="System.Drawing.Common" Version="10.0.13"/>

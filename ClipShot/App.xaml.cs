@@ -22,6 +22,12 @@ public partial class App : Application
         singleInstance = new Mutex(true, isolated?"Local\\ClipNest.Test.v1":"Local\\ClipNest.Local.v1", out bool first);
         if (!first) { if(command.Contains("--toggle-microphone")){Native.PostMessage((nint)0xffff,MicrophoneMessage,0,0);Exit();return;}if(!command.Contains("--background"))Native.PostMessage((nint)0xffff,ShowMessage,0,0);Exit(); return; }
         window = new MainWindow(isolated);
+        var health=command.FirstOrDefault(a=>a.StartsWith("--update-health-file="));
+        if(health is not null&&!isolated)
+        {
+            string marker=Path.GetFullPath(health["--update-health-file=".Length..]);string updates=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ClipNest","Updates")+Path.DirectorySeparatorChar;
+            if(marker.StartsWith(updates,StringComparison.OrdinalIgnoreCase))File.WriteAllText(marker,"ready");
+        }
         if(command.Contains("--toggle-microphone"))Native.PostMessage((nint)0xffff,MicrophoneMessage,0,0);
         if (Environment.GetCommandLineArgs().Contains("--background")) window.AppWindow.Hide();
         else window.ShowNearCursor();

@@ -1,4 +1,4 @@
-﻿param([Parameter(Mandatory=$true)][string]$MakeNsis,[string]$LatestInstallerDir,[switch]$NoLatestCopy)
+param([Parameter(Mandatory=$true)][string]$MakeNsis,[string]$LatestInstallerDir,[switch]$NoLatestCopy)
 $ErrorActionPreference='Stop'
 $publish=Join-Path (Split-Path $PSScriptRoot) 'ClipShot-app'
 $project=[xml](Get-Content -LiteralPath (Join-Path $PSScriptRoot 'ClipShot.csproj') -Raw)
@@ -8,7 +8,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $publish 'ClipShot.exe'))) {throw 'P
 if((Get-Item -LiteralPath (Join-Path $publish 'ClipShot.exe')).VersionInfo.ProductVersion.Split('+')[0] -ne $version){throw 'Publish version does not match project.'}
 $unexpected=Get-ChildItem -LiteralPath $publish -File -Recurse | Where-Object {$_.Extension -in '.db','.sqlite','.pfx','.key' -or $_.Name -like '.env*'}
 if($unexpected){throw 'Publication contains prohibited user data or secret files.'}
-foreach($required in 'ClipShot.pri','LICENSE','Assets/ClipShot.ico','Assets/ClipShot.Muted.ico','Assets/ClipShot.png','Assets/Selection.cur'){if(-not(Test-Path -LiteralPath (Join-Path $publish $required))){throw "Missing publication asset: $required"}}
+foreach($required in 'ClipShot.pri','Updater/ClipShot.Updater.exe','FileInventory.json','LICENSE','Assets/ClipShot.ico','Assets/ClipShot.Muted.ico','Assets/ClipShot.png','Assets/Selection.cur'){if(-not(Test-Path -LiteralPath (Join-Path $publish $required))){throw "Missing publication asset: $required"}}
 # Uninstall only the files shipped by this installer, never recursively delete an arbitrary chosen directory.
 $lines=@('; Generated from the publication. User data is never included.')
 foreach($f in Get-ChildItem -LiteralPath $publish -File -Recurse) {

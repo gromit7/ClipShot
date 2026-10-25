@@ -2,6 +2,8 @@ using System.Runtime.InteropServices;
 namespace ClipShot;
 internal static class Native
 {
+    [DllImport("user32.dll")]internal static extern bool ClientToScreen(nint window,ref Point point);
+    [DllImport("user32.dll")]internal static extern bool SetLayeredWindowAttributes(nint window,uint colour,byte alpha,uint flags);
     internal delegate nint WndProc(nint hwnd,uint msg,nint w,nint l);
     [DllImport("user32.dll",EntryPoint="SetWindowLongPtrW")] internal static extern nint SetWindowLongPtr(nint h,int index,nint value);
     [DllImport("user32.dll",EntryPoint="GetWindowLongPtrW")] internal static extern nint GetWindowLongPtr(nint h,int index);

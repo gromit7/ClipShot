@@ -18,7 +18,7 @@ if(-not $dotnet){$dotnet=(Get-Command dotnet -ErrorAction Stop).Source}
 $sdk=(& $dotnet --version).Trim()
 if($LASTEXITCODE -ne 0){throw 'Не удалось определить SDK.'}
 $files=@()
-foreach($relative in 'ClipShot.exe','ClipShot.dll','ClipShot.pri','Assets/ClipShot.ico','Assets/ClipShot.Muted.ico','Assets/ClipShot.png','LICENSE'){
+foreach($relative in 'ClipShot.exe','ClipShot.dll','ClipShot.pri','Assets/ClipShot.ico','Assets/ClipShot.Muted.ico','Assets/ClipShot.png','LICENSE','FileInventory.json','Updater/ClipShot.Updater.exe'){
     $file=Get-Item -LiteralPath (Join-Path $repo ('ClipShot-app/'+$relative))
     $files+=@{path=$relative;bytes=$file.Length;sha256=(Get-FileHash -LiteralPath $file.FullName).Hash.ToLowerInvariant()}
 }
