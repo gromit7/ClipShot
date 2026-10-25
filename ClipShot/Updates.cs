@@ -41,7 +41,7 @@ public static class UpdateProtocol
             if(size<1024||size>MaximumBytes||!Regex.IsMatch(digest,@"^sha256:[0-9a-fA-F]{64}$"))throw new InvalidDataException("Invalid update metadata");
             var uri=new Uri(asset.GetProperty("browser_download_url").GetString()!);
             string expected=$"/gromit7/ClipShot/releases/download/{tag}/{name}";
-            if(uri.Scheme!="https"||uri.Host!="github.com"||uri.AbsolutePath!=expected||uri.Query.Length!=0||uri.UserInfo.Length!=0)throw new InvalidDataException("Unexpected update location");
+            if(uri.Scheme!="https"||uri.Host!="github.com"||!uri.IsDefaultPort||uri.AbsolutePath!=expected||uri.Query.Length!=0||uri.Fragment.Length!=0||uri.UserInfo.Length!=0)throw new InvalidDataException("Unexpected update location");
             return new(version,uri,size,digest[7..].ToLowerInvariant());
         }
         return null;
@@ -55,26 +55,29 @@ public static class UpdateProtocol
 internal sealed class GitHubUpdates : IDisposable
 {
     private readonly HttpClient http;
-    internal GitHubUpdates(HttpMessageHandler? handler=null){http=handler is null?new HttpClient():new HttpClient(handler);http.Timeout=TimeSpan.FromMinutes(5);http.DefaultRequestHeaders.UserAgent.ParseAdd("ClipShot/1.0");http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");http.DefaultRequestHeaders.Add("X-GitHub-Api-Version","2026-03-10");}
+    private readonly HttpClient feedHttp;
+    internal GitHubUpdates(HttpMessageHandler? handler=null)
+    {
+        http=handler is null?new HttpClient():new HttpClient(handler);
+        http.Timeout=TimeSpan.FromMinutes(5);http.DefaultRequestHeaders.UserAgent.ParseAdd("ClipShot/1.0");
+        // Для ленты запрещены редиректы: одна проверка — ровно один GET без API/fallback.
+        // Загрузка установщика использует отдельный клиент, поскольку GitHub перенаправляет assets.
+        feedHttp=handler is null?new HttpClient(new HttpClientHandler{AllowAutoRedirect=false}):new HttpClient(handler,disposeHandler:false);
+        feedHttp.Timeout=TimeSpan.FromSeconds(10);feedHttp.DefaultRequestHeaders.UserAgent.ParseAdd("ClipShot/1.0");feedHttp.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+    }
     internal async Task<AppUpdate?> CheckAsync(Version version,CancellationToken token)
     {
-        using var timeout=CancellationTokenSource.CreateLinkedTokenSource(token);timeout.CancelAfter(TimeSpan.FromSeconds(20));
-        var policyJson=await ReadJson("https://raw.githubusercontent.com/gromit7/ClipShot/main/update-policy.json",timeout.Token,true);
-        var policy=policyJson is null?null:RollbackPolicy.Parse(policyJson,version);
-        string endpoint=policy is null?"latest":"tags/v"+policy.Target;
-        string release=(await ReadJson("https://api.github.com/repos/gromit7/ClipShot/releases/"+endpoint,timeout.Token))!;
-        var candidate=UpdateProtocol.Parse(release,version,policy is not null);
-        if(policy is null)return candidate;
-        if(candidate is null||candidate.Version!=policy.Target)throw new InvalidDataException("Rollback release mismatch");
-        return candidate with{IsRollback=true,Reason=policy.Reason};
+        using var timeout=CancellationTokenSource.CreateLinkedTokenSource(token);timeout.CancelAfter(TimeSpan.FromSeconds(10));
+        string json=await ReadFeed(timeout.Token);
+        return UpdateFeed.Parse(json,version);
     }
-    private async Task<string?> ReadJson(string url,CancellationToken token,bool missingAllowed=false)
+    private async Task<string> ReadFeed(CancellationToken token)
     {
-        using var response=await http.GetAsync(url,HttpCompletionOption.ResponseHeadersRead,token);
-        if(missingAllowed&&response.StatusCode==System.Net.HttpStatusCode.NotFound)return null;
+        using var response=await feedHttp.GetAsync(UpdateFeed.Url,HttpCompletionOption.ResponseHeadersRead,token);
         response.EnsureSuccessStatusCode();
+        if(response.Content.Headers.ContentLength is long length&&length>UpdateFeed.MaximumBytes)throw new InvalidDataException("Update feed is too large");
         await using var input=await response.Content.ReadAsStreamAsync(token);using var bytes=new MemoryStream();var buffer=new byte[8192];int read;
-        while((read=await input.ReadAsync(buffer,token))>0){if(bytes.Length+read>1024*1024)throw new InvalidDataException("Release response too large");bytes.Write(buffer,0,read);}
+        while((read=await input.ReadAsync(buffer,token))>0){if(bytes.Length+read>UpdateFeed.MaximumBytes)throw new InvalidDataException("Update feed is too large");bytes.Write(buffer,0,read);}
         return System.Text.Encoding.UTF8.GetString(bytes.ToArray());
     }
     internal async Task DownloadAsync(AppUpdate update,string path,IProgress<int> progress,CancellationToken token)
@@ -99,5 +102,5 @@ internal sealed class GitHubUpdates : IDisposable
         }
         finally{if(File.Exists(partial))File.Delete(partial);}
     }
-    public void Dispose()=>http.Dispose();
+    public void Dispose(){feedHttp.Dispose();http.Dispose();}
 }
