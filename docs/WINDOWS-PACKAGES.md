@@ -25,3 +25,7 @@ Release.ps1 проверяет три пакета GitHub и копирует в
 Модульные проверки покрывают выбор пакета, строгие имена/URL, pending cache, зеркало, отзыв и аварийный откат. Скриптовые фикстуры проверяют публикацию трёх пакетов, хеши, атомарность семейства и сохранение прежних файлов при ошибке. Три реально скомпилированных NSIS wrapper проверяются на граничных сборках17762/17763/19041/21999/22000/26100 в диагностическом режиме, который ничего не устанавливает.
 
 На рабочемWindows11 дополнительно выполняются настоящий путь установки и обновления Win11-пакета на синтетических данных, проверка общего payload, сохранения базы и удаления. Фактический запуск наWindows10LTSC2019 — отдельная проверка на целевой машине. Пока такой результат не получен, его нельзя считать подтверждённым только по сборке или OS guard.
+
+## Официальные требования платформы
+.NET10 включает Windows10 1809LTSC/Enterprise: https://learn.microsoft.com/en-us/dotnet/core/install/windows#supported-versions и https://github.com/dotnet/core/blob/main/release-notes/10.0/supported-os.md#windows . LTSC2019 соответствует1809: https://learn.microsoft.com/en-us/windows/whats-new/ltsc/whats-new-windows-10-2019 . WindowsAppSDK1.8 включает1809/build17763: https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/support . DesktopAcrylicBackdrop поддерживается от17763 и предусматривает сплошной fallback: https://learn.microsoft.com/en-us/windows/apps/develop/ui/materials . Это требования зависимостей, а не результат фактического теста нашей программы на целевомПК.
+
