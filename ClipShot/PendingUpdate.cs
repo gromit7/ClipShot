@@ -7,7 +7,7 @@ namespace ClipShot;
 public sealed record PendingPackage(string FilePath,AppUpdate Update);
 public static class PendingUpdate
 {
-    public static PendingPackage? Read(string json,string updatesRoot,Version current)
+    public static PendingPackage? Read(string json,string updatesRoot,Version current,int? osBuild=null)
     {
         if(Encoding.UTF8.GetByteCount(json)>16384)throw new InvalidDataException();
         var pending=JsonSerializer.Deserialize<PendingPackage>(json)??throw new InvalidDataException();
@@ -18,7 +18,8 @@ public static class PendingUpdate
         var installed=new Version(current.Major,current.Minor,Math.Max(0,current.Build));
         if(update.Version<=installed)return null;
         string version=update.Version.ToString();
-        string name=$"ClipShot-Setup-{version}.exe";
+        string name=UpdatePackages.FileName(update);
+        if(!UpdatePackages.TryParseName(name,out _,out string flavor)||!UpdatePackages.Supports(flavor,osBuild??Environment.OSVersion.Version.Build))throw new InvalidDataException("Package does not support this Windows build");
         string root=Path.GetFullPath(updatesRoot)+Path.DirectorySeparatorChar;
         string path=Path.GetFullPath(pending.FilePath);
         string url=$"https://github.com/gromit7/ClipShot/releases/download/v{version}/{name}";

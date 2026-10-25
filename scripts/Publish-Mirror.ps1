@@ -50,6 +50,33 @@ def switch_latest(bundle):
         if public.is_symlink() and os.readlink(public)!=expected:raise ValueError('Unexpected public link')
         if not public.is_symlink():link(expected,public)
     link(str(bundle.relative_to(ROOT)),current)
+def official_packages(release,version):
+    packages=[]
+    for flavor,prefix in [('legacy','ClipShot'),('win10','ClipShot-Win10'),('win11','ClipShot-Win11')]:
+        name=f'{prefix}-Setup-{version}.exe'
+        assets=[asset for asset in release['assets'] if asset.get('name')==name]
+        if len(assets)!=1:raise ValueError('One official installer per OS required: '+flavor)
+        asset=assets[0];url=f'https://github.com/{REPO}/releases/download/v{version}/{name}'
+        digest=asset.get('digest','');size=asset.get('size',0)
+        if asset.get('state')!='uploaded' or asset.get('browser_download_url')!=url or not re.fullmatch(r'sha256:[a-fA-F0-9]{64}',digest) or not 1024<=size<=262144000:raise ValueError('Invalid official asset: '+flavor)
+        packages.append({'flavor':flavor,'name':name,'size':size,'sha256':digest[7:].lower(),'url':url})
+    return packages
+
+def package_valid(root,package):
+    path=root/package['name']
+    return path.is_file() and not path.is_symlink() and path.stat().st_size==package['size'] and sha256(path)==package['sha256']
+
+def download_package(root,package):
+    target=root/package['name'];total=0
+    with urllib.request.urlopen(request(package['url']),timeout=30) as response,target.open('wb') as output:
+        for block in iter(lambda:response.read(1048576),b''):
+            total+=len(block)
+            if total>package['size']:raise ValueError('Installer exceeds official size')
+            output.write(block)
+        output.flush();os.fsync(output.fileno())
+    if not package_valid(root,package):raise ValueError('Installer differs from official release: '+package['flavor'])
+    target.chmod(0o644)
+
 def main(version,mode):
     if not re.fullmatch(r'\d+\.\d+\.\d+',version) or mode not in ('check','publish'):raise ValueError('Invalid arguments')
     tag='v'+version
@@ -57,42 +84,36 @@ def main(version,mode):
     if len(raw)>1048576:raise ValueError('Release metadata too large')
     release=json.loads(raw)
     if release.get('draft') is not False or release.get('prerelease') is not False or release.get('tag_name')!=tag:raise ValueError('Official published stable release required')
-    name=f'ClipShot-Setup-{version}.exe'
-    assets=[asset for asset in release['assets'] if asset.get('name')==name]
-    if len(assets)!=1:raise ValueError('One versioned installer required')
-    asset=assets[0];url=f'https://github.com/{REPO}/releases/download/{tag}/{name}'
-    digest=asset.get('digest','');size=asset.get('size',0)
-    if asset.get('state')!='uploaded' or asset.get('browser_download_url')!=url or not re.fullmatch(r'sha256:[a-fA-F0-9]{64}',digest) or not 1024<=size<=262144000:raise ValueError('Invalid official asset')
-    expected=digest[7:].lower();destination=ROOT/tag;package=destination/name
-    existing=package.is_file() and package.stat().st_size==size and sha256(package)==expected
+    packages=official_packages(release,version);legacy=packages[0]
+    name=legacy['name'];size=legacy['size'];expected=legacy['sha256'];destination=ROOT/tag
+    existing=all(package_valid(destination,package) for package in packages)
+    report=[{**package,'url':f'https://bot.data-clouds.ru/clipshot/{tag}/{package["name"]}','verified':package_valid(destination,package)} for package in packages]
     if mode=='check':
-        print(json.dumps({'verification':'clipshot-mirror-v1','mode':mode,'version':version,'official_release':True,'size':size,'sha256':expected,'mirror_present_and_valid':existing,'latest_zip_valid':valid_zip(ROOT/LATEST[1],name,size,expected)}));return
+        print(json.dumps({'verification':'clipshot-mirror-v1','mode':mode,'version':version,'official_release':True,'size':size,'sha256':expected,'packages':report,'mirror_present_and_valid':existing,'latest_zip_valid':valid_zip(ROOT/LATEST[1],name,size,expected)}));return
     ROOT.mkdir(mode=0o755,parents=True,exist_ok=True)
     with (ROOT/'.publish.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        if destination.exists() and not existing:raise ValueError('Refusing to overwrite immutable version')
+        if destination.exists() and (destination.is_symlink() or not existing):raise ValueError('Refusing to overwrite immutable version')
         if not existing:
             staging=pathlib.Path(tempfile.mkdtemp(prefix='.publish-',dir=ROOT))
             try:
-                target=staging/name;total=0
-                with urllib.request.urlopen(request(url),timeout=30) as response,target.open('wb') as output:
-                    for block in iter(lambda:response.read(1048576),b''):
-                        total+=len(block)
-                        if total>size:raise ValueError('Installer exceeds official size')
-                        output.write(block)
-                    output.flush();os.fsync(output.fileno())
-                if total!=size or sha256(target)!=expected:raise ValueError('Installer differs from official release')
-                target.chmod(0o644);staging.chmod(0o755);staging.rename(destination)
+                # All three EXEs become visible in one directory rename. A failed
+                # transfer cannot switch latest or expose half a package family.
+                for package in packages:download_package(staging,package)
+                staging.chmod(0o755);staging.rename(destination)
             finally:
                 if staging.exists():
                     if staging.parent.resolve()!=ROOT.resolve() or not staging.name.startswith('.publish-'):raise ValueError('Unsafe cleanup')
                     shutil.rmtree(staging)
+        if not all(package_valid(destination,package) for package in packages):raise ValueError('Incomplete OS package family')
         bundles=ROOT/'.latest';bundles.mkdir(mode=0o755,exist_ok=True);bundle=bundles/tag
         if not bundle.exists():
             temporary=pathlib.Path(tempfile.mkdtemp(prefix='.bundle-',dir=bundles))
             try:
                 (temporary/LATEST[0]).write_bytes(raw)
-                with zipfile.ZipFile(temporary/LATEST[1],'w',compression=zipfile.ZIP_STORED) as archive:archive.write(package,arcname=name)
+                # Existing bootstrap clients expect a single universal EXE in ZIP.
+                # OS-aware clients use versioned EXEs already verified above.
+                with zipfile.ZipFile(temporary/LATEST[1],'w',compression=zipfile.ZIP_STORED) as archive:archive.write(destination/name,arcname=name)
                 if not valid_zip(temporary/LATEST[1],name,size,expected):raise ValueError('Invalid latest ZIP')
                 for name2 in LATEST:(temporary/name2).chmod(0o644)
                 temporary.chmod(0o755);temporary.rename(bundle)
@@ -101,11 +122,12 @@ def main(version,mode):
                     if temporary.parent.resolve()!=bundles.resolve() or not temporary.name.startswith('.bundle-'):raise ValueError('Unsafe bundle cleanup')
                     shutil.rmtree(temporary)
         if not valid_zip(bundle/LATEST[1],name,size,expected):raise ValueError('Invalid existing bundle')
-        cached=json.loads((bundle/LATEST[0]).read_bytes());cached_assets=[entry for entry in cached['assets'] if entry.get('name')==name]
-        if cached.get('tag_name')!=tag or len(cached_assets)!=1 or cached_assets[0].get('digest','').lower()!=digest.lower():raise ValueError('Inconsistent latest metadata')
+        cached=json.loads((bundle/LATEST[0]).read_bytes())
+        if cached.get('tag_name')!=tag or official_packages(cached,version)!=packages:raise ValueError('Inconsistent latest metadata')
         switch_latest(bundle)
         if not valid_zip(ROOT/LATEST[1],name,size,expected) or json.loads((ROOT/LATEST[0]).read_bytes()).get('tag_name')!=tag:raise ValueError('Published latest verification failed')
-        print(json.dumps({'verification':'clipshot-mirror-v1','mode':mode,'version':version,'verified_package':True,'latest_zip_verified':True,'latest_json_tag':tag,'size':size,'sha256':expected,'zip_sha256':sha256(ROOT/LATEST[1]),'url':f'https://bot.data-clouds.ru/clipshot/{tag}/{name}','latest_url':'https://bot.data-clouds.ru/clipshot/ClipShot-Latest.zip'}))
+        report=[{**package,'url':f'https://bot.data-clouds.ru/clipshot/{tag}/{package["name"]}','verified':True} for package in packages]
+        print(json.dumps({'verification':'clipshot-mirror-v1','mode':mode,'version':version,'verified_package':True,'latest_zip_verified':True,'latest_json_tag':tag,'size':size,'sha256':expected,'packages':report,'zip_sha256':sha256(ROOT/LATEST[1]),'url':f'https://bot.data-clouds.ru/clipshot/{tag}/{name}','latest_url':'https://bot.data-clouds.ru/clipshot/ClipShot-Latest.zip'}))
 if __name__=='__main__':main(sys.argv[1],sys.argv[2])
 '@
 $mode=if($CheckOnly){'check'}else{'publish'}
@@ -120,5 +142,12 @@ foreach($result in $sshResults){if($result.Groups[1].Value.Trim() -ne '0'){throw
 $records=@([regex]::Matches($text,'(?m)^\{[^\r\n]*\}\s*$')|ForEach-Object {try{$_.Value|ConvertFrom-Json}catch{}})
 $record=$records|Where-Object { $_.verification -eq 'clipshot-mirror-v1' -and $_.version -eq $Version -and $_.mode -eq $mode }|Select-Object -Last 1
 if(-not $record -or $record.sha256 -notmatch '^[a-f0-9]{64}$'){throw 'Remote mirror verification result is missing.'}
+if(@($record.packages).Count -ne 3){throw 'Mirror verification must include all three OS packages.'}
+foreach($flavor in 'legacy','win10','win11'){
+    $prefix=switch($flavor){'legacy'{'ClipShot'};'win10'{'ClipShot-Win10'};'win11'{'ClipShot-Win11'}}
+    $matching=@($record.packages | Where-Object flavor -eq $flavor)
+    if($matching.Count -ne 1 -or $matching[0].name -cne "$prefix-Setup-$Version.exe" -or $matching[0].sha256 -notmatch '^[a-f0-9]{64}$' -or $matching[0].size -lt 1024 -or $matching[0].size -gt 262144000 -or $matching[0].url -cne "https://bot.data-clouds.ru/clipshot/v$Version/$prefix-Setup-$Version.exe"){throw "Invalid mirror OS package: $flavor"}
+    if(-not $CheckOnly -and -not $matching[0].verified){throw "Unverified mirrored OS package: $flavor"}
+}
 if(-not $CheckOnly -and (-not $record.verified_package -or -not $record.latest_zip_verified -or $record.latest_json_tag -ne "v$Version")){throw 'Published installer/latest pair is not verified.'}
 $record|ConvertTo-Json -Compress

@@ -179,7 +179,7 @@ public sealed partial class MainWindow
         try
         {
             string folder=Path.Combine(dataFolder,"Updates",candidate.Version+"-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);
-            string path=Path.Combine(folder,$"ClipShot-Setup-{candidate.Version}.exe");
+            string path=Path.Combine(folder,UpdatePackages.FileName(candidate));
             await updateClient.DownloadAsync(candidate,path,new Progress<int>(percent=>{if(exiting)return;updateDownloadText=$"{T("Загрузка обновления")} · {percent}%";ShowUpdateOffer();}),updateStop.Token,attempt=>{updateDownloadText=T("Связь прервана · повторяем…");ShowUpdateOffer();});
             if(exiting)return;preparedInstaller=path;preparedUpdate=candidate;SavePendingUpdate();TryInstallUpdate(startup:automatic&&CanStartupInstall);
             if(!automatic&&!updateInstalling)await OfferImmediateUpdate();

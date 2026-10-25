@@ -10,7 +10,32 @@
 !ifndef PUBLICATION_DIR
 !define PUBLICATION_DIR "..\ClipShot-app"
 !endif
+!ifndef FLAVOR
+!define FLAVOR "legacy"
+!endif
+; Все обёртки включают один и тот же проверенный payload. Различаются имя,
+; понятное назначение установщика и обязательная проверка реальной сборки ОС.
+!if "${FLAVOR}" == "win10"
+!define OUTPUT_NAME "ClipShot-Win10-Setup-${VERSION}.exe"
+!define OS_LABEL "Windows 10 x64 (сборки 17763–21999)"
+!define MIN_BUILD 17763
+!define MAX_BUILD 21999
+!else if "${FLAVOR}" == "win11"
+!define OUTPUT_NAME "ClipShot-Win11-Setup-${VERSION}.exe"
+!define OS_LABEL "Windows 11 x64 (сборка 22000 или новее)"
+!define MIN_BUILD 22000
+!define MAX_BUILD 0
+!else if "${FLAVOR}" == "legacy"
+!define OUTPUT_NAME "ClipShot-Setup-${VERSION}.exe"
+!define OS_LABEL "Windows 10/11 x64 (сборка 17763 или новее)"
+!define MIN_BUILD 17763
+!define MAX_BUILD 0
+!else
+!error "Unknown installer FLAVOR"
+!endif
 Var TestRoot
+Var OsBuild
+Var OsAllowed
 Var InstallResult
 Var InstallMutex
 Var UpdaterToken
@@ -22,7 +47,7 @@ Var OriginalInstall
 Var TransactionPrepared
 Var TransactionCommitted
 Name "ClipShot"
-OutFile "..\ClipShot-Setup-${VERSION}.exe"
+OutFile "..\${OUTPUT_NAME}"
 InstallDir "$LOCALAPPDATA\Programs\ClipShot"
 InstallDirRegKey HKCU "Software\ClipNest" "InstallDir"
 RequestExecutionLevel user
@@ -32,7 +57,7 @@ Icon "Assets\ClipShot.ico"
 UninstallIcon "Assets\ClipShot.ico"
 VIProductVersion "${VERSION}.0"
 VIAddVersionKey /LANG=1049 "ProductName" "ClipShot"
-VIAddVersionKey /LANG=1049 "FileDescription" "Установка ClipShot"
+VIAddVersionKey /LANG=1049 "FileDescription" "Установка ClipShot — ${OS_LABEL}"
 VIAddVersionKey /LANG=1049 "FileVersion" "${VERSION}"
 VIAddVersionKey /LANG=1049 "LegalCopyright" "ClipShot"
 !define MUI_ABORTWARNING
@@ -82,7 +107,7 @@ Function .onInit
   ${GetParameters} $0
   ClearErrors
   ${GetOptions} $0 "/LANGCHECK" $1
-  IfErrors normal_install
+  IfErrors check_test_os
     ${If} $TestRoot == ""
       SetErrorLevel 2
       Abort
@@ -92,7 +117,40 @@ Function .onInit
     FileClose $0
     SetErrorLevel 0
     Quit
+  check_test_os:
+  ${GetParameters} $0
+  ClearErrors
+  ${GetOptions} $0 "/OSCHECK" $1
+  IfErrors normal_install
+    ${If} $TestRoot == ""
+      SetErrorLevel 2
+      Abort
+    ${EndIf}
+    ${GetOptions} $0 "/OSBUILD=" $OsBuild
+    Call CheckOsBuild
+    FileOpen $0 "$TestRoot\installer-oscheck.txt" w
+    FileWriteUTF16LE /BOM $0 "Flavor=${FLAVOR}; Build=$OsBuild; Allowed=$OsAllowed"
+    FileClose $0
+    ${If} $OsAllowed == "1"
+      SetErrorLevel 0
+    ${Else}
+      SetErrorLevel 2
+    ${EndIf}
+    Quit
   normal_install:
+  ; /OSBUILD разрешён только в диагностике выше и никогда не подменяет
+  ; настоящую ОС при установке. Неподходящий пакет не закрывает приложение.
+  ${WinVerGetBuild} $OsBuild
+  Call CheckOsBuild
+  ${IfNot} ${RunningX64}
+    StrCpy $OsAllowed "0"
+  ${EndIf}
+  ${If} $OsAllowed != "1"
+    IfSilent +2
+      MessageBox MB_ICONSTOP "Этот установщик предназначен для ${OS_LABEL}. Выберите пакет ClipShot для вашей версии Windows."
+    SetErrorLevel 2
+    Abort
+  ${EndIf}
   ${GetParameters} $0
   ${GetOptions} $0 "/UPDATERTOKEN=" $UpdaterToken
   ClearErrors
@@ -139,14 +197,18 @@ Function .onInit
     Abort
   ${EndIf}
   setup_allowed:
-  ${IfNot} ${RunningX64}
-    MessageBox MB_ICONSTOP "Требуется Windows 11 x64."
-    Abort
+FunctionEnd
+
+Function CheckOsBuild
+  StrCpy $OsAllowed "1"
+  ${If} $OsBuild < ${MIN_BUILD}
+    StrCpy $OsAllowed "0"
   ${EndIf}
-  ${IfNot} ${AtLeastWin10}
-    MessageBox MB_ICONSTOP "Требуется Windows 11."
-    Abort
+  !if ${MAX_BUILD} > 0
+  ${If} $OsBuild > ${MAX_BUILD}
+    StrCpy $OsAllowed "0"
   ${EndIf}
+  !endif
 FunctionEnd
 
 ; Сначала сохраняем исходный каталог целиком. Если его нельзя переименовать,

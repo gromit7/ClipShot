@@ -9,10 +9,10 @@ function Step([string]$Name,[scriptblock]$Action){
     try{& $Action;$results.Add([pscustomobject]@{Name=$Name;Passed=$true;Seconds=$watch.Elapsed.TotalSeconds});Write-Host "PASS $Name"}
     catch{$results.Add([pscustomobject]@{Name=$Name;Passed=$false;Seconds=$watch.Elapsed.TotalSeconds;Error=$_.Exception.Message});throw}
 }
-function Process-Checked([string]$File,[string]$Arguments,[int]$Timeout=45000){
+function Process-Checked([string]$File,[string]$Arguments,[int]$Timeout=45000,[int]$ExpectedExit=0){
     $process=Start-Process -FilePath $File -ArgumentList $Arguments -PassThru -WindowStyle Hidden
     if(-not $process.WaitForExit($Timeout)){$process.Kill();throw "Test process timed out: $Arguments"}
-    $process.Refresh();if($process.ExitCode -ne 0){throw "Test process exited $($process.ExitCode): $Arguments"}
+    $process.Refresh();if($process.ExitCode -ne $ExpectedExit){throw "Test process exited $($process.ExitCode), expected ${ExpectedExit}: $Arguments"}
 }
 $oldTestRoot=$env:CLIPSHOT_TEST_ROOT
 try{
@@ -22,7 +22,7 @@ try{
     $project=[xml](Get-Content -LiteralPath (Join-Path $repo 'ClipShot/ClipShot.csproj') -Raw)
     $version=[string]$project.Project.PropertyGroup.Version
     Step 'Publication contents and version' {
-        foreach($name in 'ClipShot.exe','ClipShot.dll','ClipShot.pri','ClipShot.runtimeconfig.json','Updater/ClipShot.Updater.exe','FileInventory.json','LICENSE','Assets/ClipShot.ico','Assets/ClipShot.Muted.ico','Assets/ClipShot.png','Assets/Selection.cur'){
+        foreach($name in 'ClipShot.exe','ClipShot.dll','ClipShot.pri','ClipShot.runtimeconfig.json','Updater/ClipShot.Updater.exe','FileInventory.json','FileHashes.json','LICENSE','Assets/ClipShot.ico','Assets/ClipShot.Muted.ico','Assets/ClipShot.png','Assets/Selection.cur'){
             if(-not(Test-Path -LiteralPath (Join-Path $publication $name))){throw "Missing $name"}
         }
         if((Get-Item -LiteralPath $app).VersionInfo.ProductVersion.Split('+')[0] -ne $version){throw 'Wrong published version'}
@@ -37,6 +37,7 @@ try{
             @{Name='ThemeDark';Args='--smoke-test --theme=Dark';Report='ui-ok.txt';Theme='Dark'},
             @{Name='ThemeWindows98';Args='--smoke-test --theme=Windows98';Report='ui-ok.txt';Theme='Windows98'},
             @{Name='ThemeWindowsXP';Args='--smoke-test --theme=WindowsXP';Report='ui-ok.txt';Theme='WindowsXP'},
+            @{Name='ThemeCatPink';Args='--smoke-test --theme=CatPink';Report='ui-ok.txt';Theme='CatPink'},
             @{Name='Search, templates, clear, focus and themes';Args='--interaction-self-test';Report='interaction-checks.txt'},
             @{Name='Synthetic selection, PNG and cancel';Args='--capture-self-test';Report='capture-checks.txt'}
             @{Name='Screenshot editor, arrows and export';Args='--editor-self-test';Report='editor-checks.txt'}
@@ -57,18 +58,73 @@ try{
     }
     if($MakeNsis){
         if($SkipDesktop -and $PublishInstaller){throw 'Desktop and installer checks must pass before publishing an installer.'}
+        Step 'Synthetic OS package publication contracts' {& (Join-Path $PSScriptRoot 'Test-WindowsVariants.ps1')}
         Step 'Compile versioned installer' {& (Join-Path $repo 'ClipShot/build-installer.ps1') -MakeNsis $MakeNsis -NoLatestCopy}
         $setup=Join-Path $repo "ClipShot-Setup-$version.exe"
-        Step 'Compiled installer Russian strings' {
+        $wrappers=@(
+            @{Flavor='legacy';Path=$setup;Min=17763;Max=[int]::MaxValue},
+            @{Flavor='win10';Path=(Join-Path $repo "ClipShot-Win10-Setup-$version.exe");Min=17763;Max=21999},
+            @{Flavor='win11';Path=(Join-Path $repo "ClipShot-Win11-Setup-$version.exe");Min=22000;Max=[int]::MaxValue}
+        )
+        Step 'Installer OS compatibility matrix' {
+            $lines=@(foreach($wrapper in $wrappers){
+                foreach($build in 17762,17763,19041,21999,22000,26100){
+                    $guardRoot=Join-Path ([IO.Path]::GetTempPath()) ('ClipShot.Tests/'+[guid]::NewGuid().ToString('N'))
+                    New-Item -ItemType Directory -Path $guardRoot -Force | Out-Null
+                    $allowed=[int]($build -ge $wrapper.Min -and $build -le $wrapper.Max)
+                    $exit=if($allowed){0}else{2}
+                    Process-Checked $wrapper.Path ('/S /OSCHECK /OSBUILD='+$build+' /TESTROOT="'+$guardRoot+'"') 45000 $exit
+                    $line=(Get-Content -LiteralPath (Join-Path $guardRoot 'installer-oscheck.txt') -Raw -Encoding unicode).TrimEnd("`r","`n")
+                    if($line -cne "Flavor=$($wrapper.Flavor); Build=$build; Allowed=$allowed"){throw "Incorrect OS guard report: $line"}
+                    if(Test-Path -LiteralPath (Join-Path $guardRoot 'App')){throw 'OS guard test installed files.'}
+                    "PASS $line; Exit=$exit"
+                }
+            })
+            $lines | Set-Content -LiteralPath (Join-Path $reports 'installer-os-checks.txt') -Encoding utf8
+        }
+        foreach($wrapper in $wrappers){Step ('Compiled installer Russian strings '+$wrapper.Flavor) {
             $languageRoot=Join-Path ([IO.Path]::GetTempPath()) ('ClipShot.Tests/'+[guid]::NewGuid().ToString('N'))
             New-Item -ItemType Directory -Path $languageRoot -Force | Out-Null
-            Process-Checked $setup ('/S /LANGCHECK /TESTROOT="'+$languageRoot+'"')
+            Process-Checked $wrapper.Path ('/S /LANGCHECK /TESTROOT="'+$languageRoot+'"')
             $language=Get-Content -LiteralPath (Join-Path $languageRoot 'installer-language.txt') -Raw -Encoding unicode
             $expected="Установка и обновление ClipShot`r`nМастер установит ClipShot на этот компьютер. Если программа уже установлена, новая версия обновит её поверх старой. История буфера, шаблоны и настройки сохраняются. Предварительно удалять ClipShot не требуется."
             if($language -cne $expected){throw 'Compiled Russian welcome text is corrupted'}
-            Copy-Item -LiteralPath (Join-Path $languageRoot 'installer-language.txt') -Destination (Join-Path $reports 'installer-language.txt') -Force
-        }
+            Copy-Item -LiteralPath (Join-Path $languageRoot 'installer-language.txt') -Destination (Join-Path $reports ('installer-language-'+$wrapper.Flavor+'.txt')) -Force
+        }}
         if(-not $SkipDesktop){
+            Step 'Windows 11 wrapper install and upgrade' {
+                # Это настоящий Win11 install-path, а не заявление о проверке UI Win10.
+                $os=[Environment]::OSVersion.Version
+                if($os.Build -lt 22000){throw 'Полная проверка Win11-пакета требует Windows 11.'}
+                $win11=$wrappers | Where-Object Flavor -eq 'win11'
+                $variantRoot=Join-Path ([IO.Path]::GetTempPath()) ('ClipShot.Tests/'+[guid]::NewGuid().ToString('N'))
+                New-Item -ItemType Directory -Path $variantRoot -Force | Out-Null
+                $variantArgs='/S /TESTROOT="'+$variantRoot+'"'
+                Process-Checked $win11.Path $variantArgs 120000
+                $variantDir=Join-Path $variantRoot 'App'
+                $variantApp=Join-Path $variantDir 'ClipShot.exe'
+                $savedRoot=$env:CLIPSHOT_TEST_ROOT
+                try{
+                    $env:CLIPSHOT_TEST_ROOT=Join-Path $variantRoot 'Data'
+                    Process-Checked $variantApp '--upgrade-self-test'
+                    $database=Join-Path $env:CLIPSHOT_TEST_ROOT 'clips.db'
+                    $before=(Get-FileHash -LiteralPath $database).Hash
+                    # Варианты должны обновляться друг поверх друга без смены
+                    # схемы, путей данных, single-instance mutex и полезной нагрузки.
+                    Process-Checked $setup $variantArgs 120000
+                    Process-Checked $win11.Path $variantArgs 120000
+                    if((Get-FileHash -LiteralPath $database).Hash -ne $before){throw 'Switching legacy to Win11 changed user data.'}
+                    $manifest=Get-Content -LiteralPath (Join-Path $publication 'FileHashes.json') -Raw | ConvertFrom-Json -AsHashtable
+                    foreach($entry in $manifest.GetEnumerator()){
+                        if((Get-FileHash -LiteralPath (Join-Path $variantDir $entry.Key)).Hash -ne $entry.Value){throw ('Win11 payload differs from common publication: '+$entry.Key)}
+                    }
+                    Process-Checked $variantApp '--upgrade-self-test'
+                    if((Get-Content -LiteralPath (Join-Path $env:CLIPSHOT_TEST_ROOT 'upgrade-checks.txt') -Raw) -notmatch '^PASS preserved'){throw 'Win11 upgrade lost synthetic state.'}
+                    Process-Checked (Join-Path $variantDir 'Uninstall.exe') ('/S _?='+$variantDir) 120000
+                    if(Test-Path -LiteralPath $variantApp){throw 'Win11 uninstall left app files.'}
+                    Set-Content -LiteralPath (Join-Path $reports 'installer-win11-checks.txt') -Value 'PASS legacy to Win11 wrapper, identical publication, synthetic data preserved and uninstall'
+                }finally{$env:CLIPSHOT_TEST_ROOT=$savedRoot}
+            }
             Step 'Transactional install, locked DLL and verification rollback' {
                 $transactionRoot=Join-Path ([IO.Path]::GetTempPath()) ('ClipShot.Tests/'+[guid]::NewGuid().ToString('N'))
                 New-Item -ItemType Directory -Path $transactionRoot -Force | Out-Null
