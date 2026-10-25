@@ -65,6 +65,18 @@ public sealed class Store : IDisposable
         using var c=db.CreateCommand();c.CommandText="UPDATE clips SET name=$name,text=$text,hash=$hash,html='',rtf='' WHERE id=$id";
         c.Parameters.AddWithValue("$name",name);c.Parameters.AddWithValue("$text",text);c.Parameters.AddWithValue("$hash",hash);c.Parameters.AddWithValue("$id",id);c.ExecuteNonQuery();
     }
+    public void EditImage(long id,byte[] image)
+    {
+        ArgumentNullException.ThrowIfNull(image);
+        if(image.Length==0)throw new ArgumentException("Image cannot be empty.",nameof(image));
+        string hash="image"+Convert.ToHexString(SHA256.HashData(image));
+        // Одно UPDATE атомарно заменяет содержимое существующего снимка, сохраняя его id,
+        // имя и признак шаблона. UNIQUE-конфликт отменяет всё изменение; другой клип не удаляем.
+        using var c=db.CreateCommand();c.CommandText="UPDATE clips SET image=$image,hash=$hash,seen=$seen WHERE id=$id AND kind='image'";
+        c.Parameters.AddWithValue("$image",image);c.Parameters.AddWithValue("$hash",hash);
+        c.Parameters.AddWithValue("$seen",DateTime.UtcNow.ToString("O"));c.Parameters.AddWithValue("$id",id);
+        if(c.ExecuteNonQuery()!=1)throw new InvalidOperationException("The clip does not exist or is not an image.");
+    }
     public void Delete(long id) => Change("DELETE FROM clips WHERE id=$id",id,0);
     private void Change(string sql,long id,object value)
     { using var c=db.CreateCommand(); c.CommandText=sql;c.Parameters.AddWithValue("$id",id); if(sql.Contains("$v")) c.Parameters.AddWithValue("$v",value); c.ExecuteNonQuery(); }
