@@ -2,7 +2,7 @@
 param([string]$AppDirectory,[string]$ProjectFile,[switch]$CheckOnly,[switch]$SelfTest)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
-trap { Write-Error 'Preflight failed; check OS access and explicit input files. Personal paths suppressed.' -ErrorAction Continue; exit 1 }
+trap { [Console]::Error.WriteLine('Preflight failed; check OS access and explicit input files. Personal paths suppressed.'); exit 1 }
 function Assert-Preflight([bool]$Condition,[string]$Message){if(-not $Condition){throw "Preflight: $Message"}}
 function Get-PlatformAssessment([int]$Build,[string]$Architecture){
     Assert-Preflight ($Build -gt 0) 'Invalid OS build'
