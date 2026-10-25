@@ -171,7 +171,7 @@ public sealed partial class MainWindow : Window
     private async void TakeScreenshot()
     {
         if(takingScreenshot||(dialogOpen&&activeDialog is null)||exiting||editor is {CanCapture:false})return;
-        bool keepWindow=OwnForeground();
+        bool keepWindow=OwnForeground()||activeDialog is not null;
         bool restoreEditor=editor is {IsClosed:false}&&editor.AppWindow.IsVisible;
         takingScreenshot=true;
         try
