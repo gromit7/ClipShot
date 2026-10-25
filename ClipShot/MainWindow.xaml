@@ -22,27 +22,27 @@
     </ResourceDictionary>
    </ResourceDictionary.ThemeDictionaries></ResourceDictionary>
   </Grid.Resources>
-  <Grid.RowDefinitions><RowDefinition Height="56"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+  <Grid.RowDefinitions><RowDefinition Height="40"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
   <Border x:Name="HeaderSurface" Background="{ThemeResource ClipHeaderBrush}" BorderBrush="{ThemeResource ClipSeparatorBrush}" BorderThickness="0,0,0,1">
    <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="36"/><ColumnDefinition Width="44"/><ColumnDefinition x:Name="CaptionSpace" Width="104"/></Grid.ColumnDefinitions>
-    <Grid x:Name="TitleDragRegion" Background="Transparent" Padding="20,0,0,0">
-     <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-      <Image x:Name="TitleGlyph" Source="ms-appx:///Assets/ClipShot.png" Width="28" Height="28" Stretch="Uniform"/>
-      <TextBlock x:Name="TitleText" Text="ClipShot" FontSize="19" FontWeight="SemiBold" VerticalAlignment="Center"/>
+    <Grid x:Name="TitleDragRegion" Background="Transparent" Padding="12,0,0,0">
+     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+      <Image x:Name="TitleGlyph" Visibility="Collapsed" Source="ms-appx:///Assets/ClipShot.png" Width="28" Height="28" Stretch="Uniform"/>
+      <TextBlock x:Name="TitleText" Text="ClipShot" FontSize="13" VerticalAlignment="Center" Foreground="{ThemeResource ClipSecondaryBrush}"/>
      </StackPanel>
     </Grid>
     <Button x:Name="HelpButton" Grid.Column="1" Click="HelpClick" AutomationProperties.Name="Справка" ToolTipService.ToolTip="Справка" Width="32" Height="36" Padding="0" VerticalAlignment="Center" Background="Transparent" BorderThickness="0" CornerRadius="4"><FontIcon Glyph="&#xE897;" FontSize="18"/></Button>
     <Button x:Name="SettingsButton" Grid.Column="2" Click="SettingsClick" AutomationProperties.Name="Настройки" ToolTipService.ToolTip="Настройки" Width="36" Height="36" Padding="0" VerticalAlignment="Center" Background="Transparent" BorderThickness="0" CornerRadius="4"><FontIcon Glyph="&#xE713;" FontSize="19"/></Button>
    </Grid>
   </Border>
-  <Border Grid.Row="1" Padding="14" BorderBrush="{ThemeResource ClipSeparatorBrush}" BorderThickness="0,0,0,1">
+  <Border Grid.Row="2" Padding="10,7,30,7" BorderBrush="{ThemeResource ClipSeparatorBrush}" BorderThickness="0,1,0,0">
    <Grid>
-    <TextBox x:Name="Search" PlaceholderText="Поиск по истории" AutomationProperties.Name="Поиск по истории и шаблонам" TextChanged="SearchChanged" Height="42" FontSize="15" Padding="40,8,12,8" CornerRadius="6" BorderThickness="1" BorderBrush="{ThemeResource ClipSeparatorBrush}" Background="{ThemeResource ClipSearchBrush}"/>
-    <FontIcon Glyph="&#xE721;" FontSize="17" Foreground="{ThemeResource ClipSecondaryBrush}" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="13,0,0,0" IsHitTestVisible="False"/>
+    <TextBox x:Name="Search" PlaceholderText="Поиск по истории" AutomationProperties.Name="Поиск по истории и шаблонам" TextChanged="SearchChanged" Height="32" FontSize="13" Padding="32,4,10,4" CornerRadius="4" BorderThickness="1" BorderBrush="{ThemeResource ClipSeparatorBrush}" Background="{ThemeResource ClipSearchBrush}"/>
+    <FontIcon Glyph="&#xE721;" FontSize="14" Foreground="{ThemeResource ClipSecondaryBrush}" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" IsHitTestVisible="False"/>
    </Grid>
   </Border>
-  <ScrollViewer x:Name="HistoryScroll" Grid.Row="2" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"><StackPanel x:Name="Groups" Spacing="0"/></ScrollViewer>
-  <Border x:Name="FooterSurface" Grid.Row="3" Padding="16,12,12,12" Background="{ThemeResource ClipHeaderBrush}" BorderBrush="{ThemeResource ClipSeparatorBrush}" BorderThickness="0,1,0,0">
+  <ScrollViewer x:Name="HistoryScroll" Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"><StackPanel x:Name="Groups" Spacing="0"/></ScrollViewer>
+  <Border x:Name="FooterSurface" Grid.Row="3" Visibility="Collapsed" Padding="16,8,12,8" Background="{ThemeResource ClipHeaderBrush}" BorderBrush="{ThemeResource ClipSeparatorBrush}" BorderThickness="0,1,0,0">
    <StackPanel Spacing="9">
     <Border x:Name="UpdateNotice" Visibility="Collapsed" Background="{ThemeResource ClipSearchBrush}" Padding="8" CornerRadius="4">
      <Grid ColumnSpacing="8"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -52,12 +52,13 @@
      </Grid>
     </Border>
     <TextBlock x:Name="Status" Text="" Visibility="Collapsed" FontSize="12" TextWrapping="Wrap"/>
-    <StackPanel Orientation="Horizontal" Spacing="14">
+    <StackPanel x:Name="FooterHints" Visibility="Collapsed" Orientation="Horizontal" Spacing="14">
      <StackPanel Orientation="Horizontal" Spacing="6"><Border BorderBrush="{ThemeResource ClipSeparatorBrush}" BorderThickness="1" CornerRadius="3" Padding="5,2"><TextBlock Text="↑↓" FontSize="12"/></Border><TextBlock x:Name="SelectHint" Text="Выбрать" FontSize="11" Foreground="{ThemeResource ClipSecondaryBrush}" VerticalAlignment="Center"/></StackPanel>
      <StackPanel Orientation="Horizontal" Spacing="6"><Border BorderBrush="{ThemeResource ClipSeparatorBrush}" BorderThickness="1" CornerRadius="3" Padding="5,2"><TextBlock Text="Enter" FontSize="12"/></Border><TextBlock x:Name="CopyHint" Text="Копировать" FontSize="11" Foreground="{ThemeResource ClipSecondaryBrush}" VerticalAlignment="Center"/></StackPanel>
      <StackPanel Orientation="Horizontal" Spacing="6"><Border BorderBrush="{ThemeResource ClipSeparatorBrush}" BorderThickness="1" CornerRadius="3" Padding="5,2"><TextBlock Text="Esc" FontSize="12"/></Border><TextBlock x:Name="CloseHint" Text="Закрыть" FontSize="11" Foreground="{ThemeResource ClipSecondaryBrush}" VerticalAlignment="Center"/></StackPanel>
     </StackPanel>
    </StackPanel>
   </Border>
+  <Button Grid.Row="2" HorizontalAlignment="Right" VerticalAlignment="Bottom" Width="20" Height="20" Padding="0" Margin="0,0,1,1" Background="Transparent" BorderThickness="0" Foreground="{ThemeResource ClipSecondaryBrush}" PointerPressed="ResizeGripPressed" ToolTipService.ToolTip="Изменить размер" AutomationProperties.Name="Изменить размер"><TextBlock Text="◢" FontSize="11"/></Button>
  </Grid>
 </Window>

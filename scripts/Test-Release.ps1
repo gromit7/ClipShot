@@ -102,6 +102,17 @@ try{
                 $licensePath=Join-Path $installDir 'LICENSE';Set-Content -LiteralPath $licensePath -Value 'synthetic rollback marker'
                 $updateHash=(Get-FileHash -LiteralPath $updateInstaller).Hash
                 $updaterArgs='"'+$updateInstaller+'" "'+$updateHash+'" "'+$installedApp+'" "--test-root='+$sandbox+'"'
+                # Блокировки не должны закрывать приложение или менять файлы при конкуренции.
+                $lease=[IO.File]::Open((Join-Path $updates 'updater.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+                try{
+                    $blocked=Start-Process -FilePath $runner -ArgumentList $updaterArgs -PassThru -WindowStyle Hidden
+                    if(-not $blocked.WaitForExit(30000) -or $blocked.ExitCode -ne 4){throw 'Parallel updater was not deferred'}
+                }finally{$lease.Dispose()}
+                $setupLock=[Threading.Mutex]::new($false,'Local\ClipShot.Test.Setup.v1')
+                try{
+                    $blocked=Start-Process -FilePath $setup -ArgumentList $arguments -PassThru -WindowStyle Hidden
+                    if(-not $blocked.WaitForExit(30000) -or $blocked.ExitCode -ne 4){throw 'Parallel installer was not deferred silently'}
+                }finally{$setupLock.Dispose()}
                 Process-Checked $runner $updaterArgs 180000
                 if((Get-Content -LiteralPath $ready -Raw) -notmatch '^PASS preserved'){throw 'External updater did not restart and preserve isolated state'}
                 Copy-Item -LiteralPath $ready -Destination (Join-Path $reports 'updater-restart-checks.txt') -Force
@@ -118,6 +129,15 @@ try{
                 if(-not $failed.WaitForExit(120000)){throw 'Failed update recovery timed out'}
                 if($failed.ExitCode -ne 1){throw 'Invalid executable was not rejected'}
                 if((Get-Content -LiteralPath $ready -Raw) -notmatch '^PASS preserved'){throw 'Failed update did not recover the application'}
+                # Незавершённая копия не должна мешать перезапуску исходного приложения.
+                $inventoryPath=Join-Path $installDir 'FileInventory.json';$inventoryText=[IO.File]::ReadAllText($inventoryPath)
+                try{
+                    $inventory=@($inventoryText|ConvertFrom-Json)+@('missing-synthetic-file.txt')
+                    ConvertTo-Json -InputObject $inventory|Set-Content -LiteralPath $inventoryPath -Encoding utf8
+                    $failed=Start-Process -FilePath $runner -ArgumentList $updaterArgs -PassThru -WindowStyle Hidden
+                    if(-not $failed.WaitForExit(120000) -or $failed.ExitCode -ne 1){throw 'Incomplete backup was not rejected'}
+                    if((Get-Content -LiteralPath $ready -Raw) -notmatch '^PASS preserved'){throw 'Incomplete backup stopped the application'}
+                }finally{[IO.File]::WriteAllText($inventoryPath,$inventoryText)}
                 Set-Content -LiteralPath (Join-Path $reports 'updater-rollback-checks.txt') -Value 'PASS update restart, rollback file restoration, failed package recovery and preserved synthetic database'
 
                 $database=Join-Path $env:CLIPSHOT_TEST_ROOT 'clips.db' 

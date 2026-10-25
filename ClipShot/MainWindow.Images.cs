@@ -17,11 +17,12 @@ public sealed partial class MainWindow
     }
     private async Task EditImage(Clip clip)
     {
-        if(dialogOpen||exiting||clip.Image is null)return;
+        if(dialogOpen||editor is not null||exiting||clip.Image is null)return;
         dialogOpen=true;
         try
         {
             editor=await ScreenshotEditor.CreateAsync(clip.Image,words,Root.RequestedTheme);
+            dialogOpen=false;
             if(exiting){editor.Close();return;}
             Hide();byte[]? png=await editor.ShowAsync();editor=null;
             if(exiting)return;

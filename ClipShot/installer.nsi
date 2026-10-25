@@ -5,10 +5,13 @@
 !include "WinVer.nsh"
 !include "FileFunc.nsh"
 !ifndef VERSION
-!define VERSION "0.7.0"
+!define VERSION "0.7.1"
 !endif
 Var TestRoot
 Var InstallResult
+Var InstallMutex
+Var UpdaterToken
+Var AutomaticInstall
 Name "ClipShot"
 OutFile "..\ClipShot-Setup-${VERSION}.exe"
 InstallDir "$LOCALAPPDATA\Programs\ClipShot"
@@ -81,6 +84,43 @@ Function .onInit
     SetErrorLevel 0
     Quit
   normal_install:
+  ${GetParameters} $0
+  ${GetOptions} $0 "/UPDATERTOKEN=" $UpdaterToken
+  ClearErrors
+  ${GetOptions} $0 "/AUTOMATIC" $1
+  StrCpy $AutomaticInstall "0"
+  ${IfNot} ${Errors}
+    StrCpy $AutomaticInstall "1"
+  ${EndIf}
+  StrCpy $3 "Local\ClipShot.Setup.v1"
+  ${If} $TestRoot != ""
+    StrCpy $3 "Local\ClipShot.Test.Setup.v1"
+  ${EndIf}
+  ; ?e сохраняет GetLastError до следующих вызовов System-плагина.
+  System::Call 'kernel32::CreateMutexW(p 0, i 0, w r3) p.r0 ?e'
+  Pop $1
+  StrCpy $InstallMutex $0
+  ${If} $InstallMutex == 0
+    SetErrorLevel 4
+    Abort
+  ${EndIf}
+  ${If} $1 == 183
+    ${If} $UpdaterToken != ""
+      StrCpy $2 $UpdaterToken 29
+      ${If} $2 == "Local\ClipShot.Setup.Handoff."
+        System::Call 'kernel32::OpenMutexW(i 0x100000, i 0, w "$UpdaterToken") p.r2'
+        ${If} $2 != 0
+          System::Call 'kernel32::CloseHandle(p r2)'
+          Goto setup_allowed
+        ${EndIf}
+      ${EndIf}
+    ${EndIf}
+    IfSilent +2
+      MessageBox MB_OK "Установка ClipShot уже выполняется."
+    SetErrorLevel 4
+    Abort
+  ${EndIf}
+  setup_allowed:
   ${IfNot} ${RunningX64}
     MessageBox MB_ICONSTOP "Требуется Windows 11 x64."
     Abort
@@ -98,8 +138,17 @@ Function CloseClipShot
     StrCpy $2 "ClipNest.Test.Quit.v1"
     StrCpy $3 "Local\ClipNest.Test.v1"
   ${EndIf}
+  StrCpy $4 0
+  ${If} $AutomaticInstall == "1"
+    StrCpy $2 "ClipNest.UpdateQuit.v1"
+    ${If} $TestRoot != ""
+      StrCpy $2 "ClipNest.Test.UpdateQuit.v1"
+    ${EndIf}
+    System::Call 'kernel32::GetTickCount() i.r4'
+    IntOp $4 $4 + 5000
+  ${EndIf}
   System::Call 'user32::RegisterWindowMessageW(w r2) i.r0'
-  System::Call 'user32::PostMessageW(p 0xffff, i r0, p 0, p 0)'
+  System::Call 'user32::PostMessageW(p 0xffff, i r0, p r4, p 0)'
   StrCpy $1 0
   wait_for_exit:
   Sleep 100
@@ -109,6 +158,9 @@ Function CloseClipShot
     IntOp $1 $1 + 1
     IntCmp $1 50 show_close_prompt wait_for_exit show_close_prompt
     show_close_prompt:
+    IfSilent 0 +3
+      SetErrorLevel 4
+      Abort
     MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "Закройте запущенный ClipShot через меню трея → Выход, затем нажмите ОК." IDOK retry IDCANCEL stop
     retry:
     Call CloseClipShot

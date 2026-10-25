@@ -8,6 +8,11 @@ public sealed class UiText(string? language)
     public static string Russian(string text)=>EnglishText.FirstOrDefault(p=>p.Value==text).Key??text;
     private static readonly Dictionary<string,string> EnglishText=new(StringComparer.Ordinal)
     {
+        ["При выборе клипа"]="When selecting a clip",["Только в буфер"]="Clipboard only",["В буфер и в предыдущее приложение"]="Clipboard and previous application",
+        ["Копировать в буфер"]="Copy to clipboard",["Копировать в буфер · Enter"]="Copy to clipboard · Enter",["Сохранить PNG"]="Save PNG",
+        ["Установка обновлений"]="Update installation",["Автоматически, когда ПК не используется"]="Automatically while the PC is idle",["Только по нажатию"]="Only when I click",
+        ["Обновление установится автоматически во время простоя."]="The update will install automatically while idle.",
+        ["Обновления с GitHub устанавливаются сами после пяти минут без мыши и клавиатуры, когда окно скрыто и редактор закрыт. Данные сохраняются; после обновления — плашка. Ручной режим — в настройках."]="GitHub updates install automatically after five minutes without mouse or keyboard input, while the window is hidden and the editor is closed. Data is preserved; a notice appears afterwards. Manual mode is available in Settings.",
         ["Также Shift+PrintScreen — снимок области"]="Also use Shift+PrintScreen to capture a region",
         ["Shift+PrintScreen занято другой программой. Основное сочетание снимка остаётся доступным."]="Shift+PrintScreen is used by another app. The main capture shortcut remains available.",
         ["Возможности ClipShot"]="ClipShot features",

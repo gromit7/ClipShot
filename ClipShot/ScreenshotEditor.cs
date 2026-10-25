@@ -28,6 +28,8 @@ internal sealed partial class ScreenshotEditor : Window
     private readonly TaskCompletionSource<byte[]?> completion=new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly Dictionary<MarkTool,AppBarToggleButton> tools=new();
     private readonly AppBarButton undo=new(),redo=new();
+    private readonly CommandBar toolbar=new(){DefaultLabelPosition=CommandBarDefaultLabelPosition.Bottom,IsDynamicOverflowEnabled=false,OverflowButtonVisibility=CommandBarOverflowButtonVisibility.Collapsed,Width=1000};
+    private readonly AppBarButton copy=new();
     private MarkTool tool=MarkTool.Arrow;
     private ImagePoint start,end;
     private bool dragging,dirty,closed,busy,dialog;
@@ -41,19 +43,19 @@ internal sealed partial class ScreenshotEditor : Window
         Title=T("Разметка снимка — ClipShot");root.RequestedTheme=theme;
         root.Background=new SolidColorBrush(theme==ElementTheme.Dark?Microsoft.UI.ColorHelper.FromArgb(255,32,33,37):Microsoft.UI.Colors.WhiteSmoke);
         root.RowDefinitions.Add(new(){Height=GridLength.Auto});root.RowDefinitions.Add(new(){Height=new(1,GridUnitType.Star)});root.RowDefinitions.Add(new(){Height=GridLength.Auto});Content=root;
-        var bar=new CommandBar{DefaultLabelPosition=CommandBarDefaultLabelPosition.Right,IsDynamicOverflowEnabled=false};
-        var actions=new CommandBar{DefaultLabelPosition=CommandBarDefaultLabelPosition.Right,IsDynamicOverflowEnabled=false};
-        void Tool(MarkTool kind,string label,string glyph,bool secondary=false){var b=new AppBarToggleButton{Label=T(label),Icon=new FontIcon{Glyph=glyph},IsChecked=kind==MarkTool.Arrow};ToolTipService.SetToolTip(b,T(label));b.Click+=(_,_)=>{tool=kind;foreach(var pair in tools)pair.Value.IsChecked=pair.Key==kind;Hint();};tools[kind]=b;if(secondary)bar.SecondaryCommands.Add(b);else bar.PrimaryCommands.Add(b);}
+        var bar=toolbar;
+        void Tool(MarkTool kind,string label,string glyph){var b=new AppBarToggleButton{Label=T(label),Icon=new FontIcon{Glyph=glyph},IsChecked=kind==MarkTool.Arrow,Width=kind==MarkTool.Redact?106:76,FontSize=12};ToolTipService.SetToolTip(b,T(label));b.Click+=(_,_)=>{tool=kind;foreach(var pair in tools)pair.Value.IsChecked=pair.Key==kind;Hint();};tools[kind]=b;bar.PrimaryCommands.Add(b);}
         Tool(MarkTool.Arrow,"Стрелка","\uE72A");Tool(MarkTool.Rectangle,"Рамка","\uE739");Tool(MarkTool.Text,"Подпись","\uE8D2");
         Tool(MarkTool.Blur,"Мозаика","\uE7A7");Tool(MarkTool.Redact,"Скрыть область","\uE72E");
-        undo.Label=T("Отменить");undo.Icon=new SymbolIcon(Symbol.Undo);undo.Click+=(_,_)=>{if(busy)return;history.Undo();_=RefreshAsync();};actions.PrimaryCommands.Add(undo);
-        redo.Label=T("Повторить");redo.Icon=new SymbolIcon(Symbol.Redo);redo.Click+=(_,_)=>{if(busy)return;history.Redo();_=RefreshAsync();};actions.PrimaryCommands.Add(redo);
-        var copy=new AppBarButton{Label=T("Копировать"),Icon=new SymbolIcon(Symbol.Copy)};ToolTipService.SetToolTip(copy,T("Копировать · Enter"));copy.Click+=async(_,_)=>await CopyAsync();actions.PrimaryCommands.Add(copy);
-        var save=new AppBarButton{Label=T("Сохранить"),Icon=new SymbolIcon(Symbol.Save)};ToolTipService.SetToolTip(save,T("Сохранить PNG · Ctrl+S"));save.Click+=async(_,_)=>await SaveAsync();actions.PrimaryCommands.Add(save);
+        undo.Label=T("Отменить");undo.Width=76;undo.FontSize=12;undo.Icon=new SymbolIcon(Symbol.Undo);undo.Click+=(_,_)=>{if(busy)return;history.Undo();_=RefreshAsync();};bar.PrimaryCommands.Add(undo);
+        redo.Label=T("Повторить");redo.Width=76;redo.FontSize=12;redo.Icon=new SymbolIcon(Symbol.Redo);redo.Click+=(_,_)=>{if(busy)return;history.Redo();_=RefreshAsync();};bar.PrimaryCommands.Add(redo);
+        copy.Label=T("Копировать в буфер");copy.Width=150;copy.FontSize=12;copy.Icon=new SymbolIcon(Symbol.Copy);ToolTipService.SetToolTip(copy,T("Копировать в буфер · Enter"));copy.Click+=async(_,_)=>await CopyAsync();bar.PrimaryCommands.Add(copy);
+        var save=new AppBarButton{Label=T("Сохранить PNG"),Width=108,FontSize=12,Icon=new SymbolIcon(Symbol.Save)};ToolTipService.SetToolTip(save,T("Сохранить PNG · Ctrl+S"));save.Click+=async(_,_)=>await SaveAsync();bar.PrimaryCommands.Add(save);
         var colors=new ComboBox{Width=116,Margin=new Thickness(8,0,8,0)};
         foreach(string name in new[]{"Красный","Синий","Чёрный","Белый"})colors.Items.Add(T(name));
         colors.SelectedIndex=0;
-        colors.SelectionChanged+=(_,_)=>color=new[]{"#E53935","#1565C0","#111111","#FFFFFF"}[Math.Max(0,colors.SelectedIndex)];actions.Content=colors;var commandRows=new StackPanel();commandRows.Children.Add(bar);commandRows.Children.Add(actions);root.Children.Add(commandRows);
+        colors.SelectionChanged+=(_,_)=>color=new[]{"#E53935","#1565C0","#111111","#FFFFFF"}[Math.Max(0,colors.SelectedIndex)];bar.Content=colors;
+        root.Children.Add(new Viewbox{Child=bar,Stretch=Stretch.Uniform,StretchDirection=StretchDirection.DownOnly,HorizontalAlignment=HorizontalAlignment.Stretch});
         surface.Width=source.Width;surface.Height=source.Height;surface.Background=new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         image.Width=source.Width;image.Height=source.Height;surface.Children.Add(image);surface.Children.Add(guides);SetImage(source);
         var viewbox=new Viewbox{Child=surface,Stretch=Stretch.Uniform,Margin=new Thickness(12)};Grid.SetRow(viewbox,1);root.Children.Add(viewbox);
@@ -75,6 +77,7 @@ internal sealed partial class ScreenshotEditor : Window
     }
     internal Task<byte[]?> ShowAsync(){Activate();return completion.Task;}
     internal bool IsClosed=>closed;
+    internal bool CanCapture=>!closed&&!busy&&!dialog&&!dragging;
     private void SetImage(ScreenFrame frame){var bitmap=new WriteableBitmap(frame.Width,frame.Height);using(var stream=bitmap.PixelBuffer.AsStream())stream.Write(frame.Pixels);bitmap.Invalidate();image.Source=bitmap;}
     private ImagePoint Point(PointerRoutedEventArgs e){var p=e.GetCurrentPoint(surface).Position;return new ImagePoint(p.X,p.Y).Clamp(source.Width,source.Height);}
     private Annotation CurrentMark()

@@ -45,18 +45,18 @@ public sealed partial class MainWindow : Window
     public MainWindow(bool smoke)
     {
         InitializeComponent(); isolated=smoke;
-        Status.RegisterPropertyChangedCallback(TextBlock.TextProperty,(_,_)=>Status.Visibility=string.IsNullOrEmpty(Status.Text)?Visibility.Collapsed:Visibility.Visible);
+        Status.RegisterPropertyChangedCallback(TextBlock.TextProperty,(_,_)=>{Status.Visibility=string.IsNullOrEmpty(Status.Text)?Visibility.Collapsed:Visibility.Visible;UpdateFooterVisibility();});
         Title=T("ClipShot — буфер обмена и скриншоты");
         dataFolder=TestEnvironment.DataFolder(smoke,Environment.GetEnvironmentVariable("CLIPSHOT_TEST_ROOT"));
         store=new Store(Path.Combine(dataFolder,"clips.db"));ApplyLanguage();
         hwnd=WinRT.Interop.WindowNative.GetWindowHandle(this);
         ExtendsContentIntoTitleBar=true;SetTitleBar(TitleDragRegion);
-        AppWindow.TitleBar.PreferredHeightOption=TitleBarHeightOption.Tall;
+        AppWindow.TitleBar.PreferredHeightOption=TitleBarHeightOption.Standard;
         Native.SetWindowLongPtr(hwnd,-16,(nint)((long)Native.GetWindowLongPtr(hwnd,-16)&~0x10000L));
         Native.SetWindowPos(hwnd,0,0,0,0,0,0x27);
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory,"Assets","ClipShot.ico"));
         AppWindow.Resize(new SizeInt32(AppSettings.WindowWidth(store.Get("width","520")),AppSettings.WindowHeight(store.Get("height","680"))));
-        if(AppWindow.Presenter is OverlappedPresenter presenter) presenter.IsMaximizable=false;
+        if(AppWindow.Presenter is OverlappedPresenter presenter){presenter.IsMaximizable=false;presenter.IsResizable=true;}
         procedure=WindowMessage;
         previous=Native.SetWindowLongPtr(hwnd,-4,Marshal.GetFunctionPointerForDelegate(procedure));
         if(!isolated)
@@ -77,7 +77,7 @@ public sealed partial class MainWindow : Window
         leaveTimer.Tick+=(_,_)=>{leaveTimer.Stop();if(!overPreview&&hovered==null)preview.IsOpen=false;};
         cleanupTimer.Tick+=(_,_)=>{Prune();Render();}; cleanupTimer.Start();
         AppWindow.Closing+=(_,e)=>{ if(!exiting){e.Cancel=true;Hide();} };
-        AppWindow.Changed+=(_,e)=> { if(!exiting&&e.DidSizeChange && AppWindow.Size.Width>0){ store.Set("width",AppWindow.Size.Width.ToString());store.Set("height",AppWindow.Size.Height.ToString()); } };
+        AppWindow.Changed+=(_,e)=> { if(!exiting&&!windowResizing&&e.DidSizeChange && AppWindow.Size.Width>0){ store.Set("width",AppWindow.Size.Width.ToString());store.Set("height",AppWindow.Size.Height.ToString()); } };
         Root.Loaded+=(_,_)=>PositionSection();AppWindow.Changed+=(_,_)=>{if(!exiting)PositionSection();};
         if(isolated) SeedSmoke();
     }
@@ -109,9 +109,12 @@ public sealed partial class MainWindow : Window
     }
     private nint WindowMessage(nint h,uint msg,nint w,nint l)
     {
+        if(msg==0x0231)BeginWindowResize();
+        if(msg==0x0232)EndWindowResize();
         if(msg==0x0112&&((long)w&0xFFF0)==0xF020){DispatcherQueue.TryEnqueue(Hide);return 0;}
         if(msg==App.ShowMessage){DispatcherQueue.TryEnqueue(ShowNearCursor);return 0;}
         if(msg==App.QuitMessage){DispatcherQueue.TryEnqueue(Quit);return 0;}
+        if(msg==App.UpdateQuitMessage){DispatcherQueue.TryEnqueue(()=>{if(UpdateIdlePolicy.QuitRequestValid(unchecked((uint)Environment.TickCount),(uint)w)&&CanAutoInstall())Quit();});return 0;}
         if(msg==taskbarCreated&&(!isolated||shellTest)){DispatcherQueue.TryEnqueue(()=>{trayReady=false;CreateTray();});return 0;}
         if(msg==App.MicrophoneMessage){DispatcherQueue.TryEnqueue(()=>RefreshMicrophone(true));return 0;}
         if(msg==0x031D && !isolated) { DispatcherQueue.TryEnqueue(()=>Capture()); }
@@ -125,7 +128,7 @@ public sealed partial class MainWindow : Window
         if(msg==0x8001)
         {
             int mouse=(int)l;
-            if(mouse==0x0202)DispatcherQueue.TryEnqueue(ShowNearCursor);
+            if(mouse==0x0202)DispatcherQueue.TryEnqueue(ToggleVisibility);
             if(mouse==0x0205)
             {
                 Native.GetCursorPos(out var p);Native.SetForegroundWindow(hwnd);
@@ -140,7 +143,7 @@ public sealed partial class MainWindow : Window
     public void ShowNearCursor()
     {
         RememberPasteTarget();
-        if(editor is not null){editor.Activate();return;}
+        if(editor is not null){editor.AppWindow.Show();editor.Activate();return;}
         if(takingScreenshot||exiting)return;
         Prune();Render();Native.GetCursorPos(out var p);
         var area=DisplayArea.GetFromPoint(new PointInt32(p.X,p.Y),DisplayAreaFallback.Nearest).WorkArea;
@@ -148,11 +151,17 @@ public sealed partial class MainWindow : Window
         int y=Math.Clamp(p.Y+12,area.Y,Math.Max(area.Y,area.Y+area.Height-AppWindow.Size.Height));
         AppWindow.Move(new PointInt32(x,y));AppWindow.Show();Activate();Native.SetForegroundWindow(hwnd);Search.Focus(FocusState.Programmatic);PositionSection();ShowUpdateOffer();
     }
-    private void Hide(){sectionPopup.IsOpen=false;preview.IsOpen=false;hoverTimer.Stop();AppWindow.Hide();Search.Text="";}
+    private void Hide(){activeDialog?.Hide();sectionFocusTimer.Stop();sectionPopup.IsOpen=false;preview.IsOpen=false;hoverTimer.Stop();AppWindow.Hide();Search.Text="";}
+    private void ToggleVisibility()
+    {
+        if(exiting||takingScreenshot)return;
+        if(editor is {IsClosed:false}){if(editor.AppWindow.IsVisible)editor.AppWindow.Hide();else{editor.AppWindow.Show();editor.Activate();}return;}
+        if(AppWindow.IsVisible)Hide();else ShowNearCursor();
+    }
     private void Quit()
     {
         if(exiting)return;
-        exiting=true;sectionPopup.IsOpen=false;StopUpdates();StopMicrophone();hoverTimer.Stop();leaveTimer.Stop();cleanupTimer.Stop();
+        exiting=true;activeDialog?.Hide();sectionFocusTimer.Stop();sectionPopup.IsOpen=false;StopUpdates();StopMicrophone();hoverTimer.Stop();leaveTimer.Stop();cleanupTimer.Stop();
         captureWindow?.Cancel();
         editor?.Close();
         if(!isolated)Native.RemoveClipboardFormatListener(hwnd);
@@ -161,12 +170,14 @@ public sealed partial class MainWindow : Window
     }
     private async void TakeScreenshot()
     {
-        if(takingScreenshot||dialogOpen)return;
+        if(takingScreenshot||(dialogOpen&&activeDialog is null)||exiting||editor is {CanCapture:false})return;
+        bool keepWindow=OwnForeground();
+        bool restoreEditor=editor is {IsClosed:false}&&editor.AppWindow.IsVisible;
         takingScreenshot=true;
         try
         {
-            Hide();await Task.Delay(160);DesktopCapture.DwmFlush();
-            var frame=shellTest?SyntheticFrame():DesktopCapture.ReadDesktop();captureWindow=new RegionCaptureWindow(frame,shellTest,words);
+            if(!keepWindow)Hide();hoverTimer.Stop();await Task.Delay(160);DesktopCapture.DwmFlush();
+            var frame=isolated?SyntheticFrame():DesktopCapture.ReadDesktop();captureWindow=new RegionCaptureWindow(frame,shellTest,words);
             var selectedFrame=await captureWindow.SelectAsync();captureWindow=null;
             if(selectedFrame is null||exiting)return;
             byte[] png=await DesktopCapture.Png(selectedFrame);
@@ -182,7 +193,7 @@ public sealed partial class MainWindow : Window
             captureWindow?.Cancel();captureWindow=null;
             if(!exiting){takingScreenshot=false;ShowNearCursor();Status.Text=T("Не удалось сделать снимок. Повторите попытку.");}
         }
-        finally{takingScreenshot=false;}
+        finally{takingScreenshot=false;if(!exiting){if(restoreEditor&&editor is {IsClosed:false})editor.Activate();else if(keepWindow){AppWindow.Show();Activate();}}}
     }
     private async void Capture()
     {
@@ -226,7 +237,7 @@ public sealed partial class MainWindow : Window
         if(exiting)return;
         try
         {
-            if(isolated){store.Add(clip.Kind,clip.Text,clip.Html,clip.Rtf,clip.Image);Render();return;}
+            if(isolated){store.Add(clip.Kind,clip.Text,clip.Html,clip.Rtf,clip.Image);CollapseSection();Render();return;}
             var data=new DataPackage();data.RequestedOperation=DataPackageOperation.Copy;
             if(clip.Image is not null)
             {
@@ -239,7 +250,7 @@ public sealed partial class MainWindow : Window
             }
             ownSequence=Native.GetClipboardSequenceNumber();
             // Choosing an existing clip is a new use, without recording a duplicate.
-            store.Add(clip.Kind,clip.Text,clip.Html,clip.Rtf,clip.Image);Render();
+            store.Add(clip.Kind,clip.Text,clip.Html,clip.Rtf,clip.Image);CollapseSection();Render();
             if(store.Get("autopaste","0")=="1")await TryPastePrevious();else Search.Focus(FocusState.Programmatic);
         }
         catch {Status.Text=T("Не удалось скопировать. Повторите выбор.");}
@@ -337,7 +348,7 @@ public sealed partial class MainWindow : Window
     }
     private async void ShowPreview()
     {
-        if(exiting)return;
+        if(exiting||windowResizing)return;
         try
         {
         var clip=hovered;var anchor=hoverAnchor;if(clip is null||anchor is null)return;overPreview=false;
@@ -346,7 +357,7 @@ public sealed partial class MainWindow : Window
         if(clip.Image is not null){var img=new Image{MaxHeight=420,Stretch=Stretch.Uniform};body.Children.Add(img);await LoadImageAsync(img,clip.Image);}
         else body.Children.Add(new ScrollViewer{MaxHeight=420,IsTabStop=false,Content=new TextBlock{Text=clip.Text,TextWrapping=TextWrapping.Wrap,IsTextSelectionEnabled=false}});
         body.PointerEntered+=(_,_)=>{overPreview=true;leaveTimer.Stop();};body.PointerExited+=(_,_)=>{overPreview=false;leaveTimer.Start();};
-        if(exiting||hovered?.Id!=clip.Id)return;
+        if(exiting||windowResizing||hovered?.Id!=clip.Id)return;
         PaintText(body,primaryBrush);
         var border=new Border{Child=body,Padding=new Thickness(16),CornerRadius=new CornerRadius(activeTheme.Corner),BorderThickness=new Thickness(1),RequestedTheme=Root.ActualTheme,Background=ClipBrush("ClipSearchBrush"),BorderBrush=ClipBrush("ClipSeparatorBrush")};
         preview.Child=border;preview.XamlRoot=Root.XamlRoot;
@@ -384,8 +395,8 @@ public sealed partial class MainWindow : Window
         var content=new TextBox{Text=clip.Text,AcceptsReturn=true,TextWrapping=TextWrapping.Wrap,MinHeight=100,MaxHeight=280,Header=T("Содержимое")};
         var panel=new StackPanel{Spacing=12,MinWidth=320};panel.Children.Add(text);if(clip.Kind=="text")panel.Children.Add(content);
         var dialog=new ContentDialog{Title=T("Изменить шаблон"),Content=panel,PrimaryButtonText=T("Сохранить"),CloseButtonText=T("Отмена"),XamlRoot=Root.XamlRoot,RequestedTheme=Root.RequestedTheme};
-        dialogOpen=true;var result=await dialog.ShowAsync();dialogOpen=false;
-        if(result==ContentDialogResult.Primary)
+        var result=await ShowDialogAsync(dialog);
+        if(!exiting&&result==ContentDialogResult.Primary)
         {
             try {if(clip.Kind=="text"){if(string.IsNullOrWhiteSpace(content.Text)){Status.Text=T("Пустой шаблон не сохранён.");return;}store.EditText(clip.Id,text.Text.Trim(),content.Text);}else store.Edit(clip.Id,text.Text.Trim());Render();}
             catch(Microsoft.Data.Sqlite.SqliteException){Status.Text=T("Такой текст уже есть в истории. Добавьте существующий клип в шаблоны.");}
@@ -407,6 +418,7 @@ public sealed partial class MainWindow : Window
         preview.IsOpen=false;
         var panel=new StackPanel{Spacing=12,MinWidth=320};
         var automaticUpdates=new CheckBox{Content=T("Проверять обновления автоматически"),IsChecked=store.Get("updatecheck","1")=="1"};panel.Children.Add(automaticUpdates);
+        var updateMode=new ComboBox{Header=T("Установка обновлений"),HorizontalAlignment=HorizontalAlignment.Stretch};updateMode.Items.Add(T("Автоматически, когда ПК не используется"));updateMode.Items.Add(T("Только по нажатию"));updateMode.SelectedIndex=store.Get("updateinstall","auto")=="manual"?1:0;panel.Children.Add(updateMode);
         var checkUpdates=new Button{Content=T("Проверить обновления")};checkUpdates.Click+=async(_,_)=>await CheckUpdates(true);panel.Children.Add(checkUpdates);
         var sectionLayout=new ComboBox{Header=T("Раскрытие разделов"),HorizontalAlignment=HorizontalAlignment.Stretch};sectionLayout.Items.Add(T("Вбок, где больше места"));sectionLayout.Items.Add(T("Внутри списка"));sectionLayout.SelectedIndex=store.Get("sectionlayout","side")=="inline"?1:0;panel.Children.Add(sectionLayout);
         var days=new ComboBox{Header=T("Хранить историю"),HorizontalAlignment=HorizontalAlignment.Stretch};foreach(var s in new[]{"30 дней","90 дней","Бессрочно"})days.Items.Add(T(s));days.SelectedIndex=store.Get("days","90") switch{"30"=>0,"0"=>2,_=>1};panel.Children.Add(days);
@@ -422,7 +434,7 @@ public sealed partial class MainWindow : Window
         var shiftPrint=new CheckBox{Content=T("Также Shift+PrintScreen — снимок области"),IsChecked=store.Get("shiftprint","1")=="1"};panel.Children.Add(shiftPrint);
         var keyError=new TextBlock{TextWrapping=TextWrapping.Wrap,MaxWidth=340};panel.Children.Add(keyError);
         var startup=new CheckBox{Content=T("Запускать с Windows"),IsChecked=store.Get("startup","1")=="1"};panel.Children.Add(startup);
-        var autopaste=new CheckBox{Content=T("Вставлять в предыдущее приложение"),IsChecked=store.Get("autopaste","0")=="1"};panel.Children.Add(autopaste);
+        var autopaste=new ComboBox{Header=T("При выборе клипа"),HorizontalAlignment=HorizontalAlignment.Stretch};autopaste.Items.Add(T("Только в буфер"));autopaste.Items.Add(T("В буфер и в предыдущее приложение"));autopaste.SelectedIndex=store.Get("autopaste","0")=="1"?1:0;panel.Children.Add(autopaste);
         panel.Children.Add(new TextBlock{Text=T("Только если там доступен текстовый курсор. По умолчанию клип лишь копируется в буфер."),FontSize=12,Opacity=.65,MaxWidth=340,TextWrapping=TextWrapping.Wrap});
         var saveMicrophoneSettings=MicrophoneSettings(panel);
         var clear=new Button{Content=T("Очистить историю…")}; bool wantsClear=false;clear.Click+=(_,_)=>{wantsClear=true;clear.Content=T("История будет очищена после сохранения");};panel.Children.Add(clear);
@@ -448,14 +460,15 @@ public sealed partial class MainWindow : Window
                 }
             }
         };
-        dialogOpen=true;var result=await dialog.ShowAsync();dialogOpen=false;
-        if(result!=ContentDialogResult.Primary)return;
+        var result=await ShowDialogAsync(dialog);
+        if(exiting||result!=ContentDialogResult.Primary)return;
         store.Set("shiftprint",shiftPrint.IsChecked==true?"1":"0");if(!isolated)RegisterScreenshotAlias();
         store.Set("sectionlayout",sectionLayout.SelectedIndex==1?"inline":"side");
         store.Set("updatecheck",automaticUpdates.IsChecked==true?"1":"0");
+        store.Set("updateinstall",updateMode.SelectedIndex==1?"manual":"auto");ShowUpdateOffer();
         store.Set("days",days.SelectedIndex switch{0=>"30",2=>"0",_=>"90"});store.Set("theme",AppThemes.All[Math.Max(0,theme.SelectedIndex)].Id);
         try{if(!isolated)SetStartup(startup.IsChecked==true);store.Set("startup",startup.IsChecked==true?"1":"0");}catch{Status.Text=T("Не удалось изменить автозапуск.");}
-        store.Set("autopaste",autopaste.IsChecked==true?"1":"0");store.Set("language",language.SelectedIndex==1?"en":"ru");ApplyLanguage();saveMicrophoneSettings();if(wantsClear)store.Clear();ApplyTheme();Prune();Render();
+        store.Set("autopaste",autopaste.SelectedIndex==1?"1":"0");store.Set("language",language.SelectedIndex==1?"en":"ru");ApplyLanguage();saveMicrophoneSettings();if(wantsClear)store.Clear();ApplyTheme();Prune();Render();
     }
     private async void SeedSmoke()
     {
@@ -499,7 +512,7 @@ public sealed partial class MainWindow : Window
         {
             timer.Stop();Directory.CreateDirectory(dataFolder);
             var p=SettingsButton.TransformToVisual(Root).TransformPoint(new Windows.Foundation.Point(0,0));
-            bool layout=Search.ActualHeight>=40&&Search.ActualWidth>300&&TitleDragRegion.ActualWidth>200&&p.X+SettingsButton.ActualWidth<=Root.ActualWidth-AppWindow.TitleBar.RightInset+1;
+            bool layout=Search.ActualHeight>=30&&Search.ActualHeight<=34&&Search.ActualWidth>300&&Search.TransformToVisual(Root).TransformPoint(new Windows.Foundation.Point()).Y>HistoryScroll.ActualHeight&&TitleDragRegion.ActualWidth>200&&p.X+SettingsButton.ActualWidth<=Root.ActualWidth-AppWindow.TitleBar.RightInset+1;
             bool pass=layout&&Root.XamlRoot is not null&&visible.Count==6;
             File.WriteAllText(Path.Combine(dataFolder,"ui-ok.txt"),$"{(pass?"PASS":"FAIL")} WinUI launched; visible rows={visible.Count}; XamlRoot={Root.XamlRoot is not null}; Theme={Root.ActualTheme}; ThemeId={activeTheme.Id}; Acrylic={SystemBackdrop is DesktopAcrylicBackdrop}; Layout={layout}; CaptionInset={AppWindow.TitleBar.RightInset}; SearchWidth={Search.ActualWidth}; SettingsX={p.X}");
             if(Environment.GetCommandLineArgs().Contains("--interaction-self-test"))pass=await RunInteractionChecks()&&pass;

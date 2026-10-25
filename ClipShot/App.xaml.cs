@@ -7,6 +7,7 @@ public partial class App : Application
     internal static readonly bool Isolated = TestEnvironment.IsIsolated(Environment.GetCommandLineArgs());
     internal static readonly uint ShowMessage=Native.RegisterWindowMessage(TestEnvironment.MessageName(Isolated,"Show"));
     internal static readonly uint QuitMessage=Native.RegisterWindowMessage(TestEnvironment.MessageName(Isolated,"Quit"));
+    internal static readonly uint UpdateQuitMessage=Native.RegisterWindowMessage(TestEnvironment.MessageName(Isolated,"UpdateQuit"));
     internal static readonly uint MicrophoneMessage=Native.RegisterWindowMessage(TestEnvironment.MessageName(Isolated,"Microphone"));
     public App()
     {

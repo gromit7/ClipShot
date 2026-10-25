@@ -13,6 +13,23 @@ public sealed partial class MainWindow
     private string? activeSection="Сегодня";
     private bool sectionInitialized,buildingSection;
     private string? animatedSection;
+    private readonly DispatcherTimer sectionFocusTimer=new(){Interval=TimeSpan.FromMilliseconds(250)};
+    private bool sectionFocusTimerReady;
+    private void CollapseSection()
+    {
+        if(!SideSections)return;
+        activeSection=null;sectionInitialized=true;sectionPopup.IsOpen=false;preview.IsOpen=false;hoverTimer.Stop();hovered=null;sectionFocusTimer.Stop();
+    }
+    private void DismissSectionForExternalFocus(bool external)
+    {
+        if(!external||windowResizing||!sectionPopup.IsOpen)return;
+        CollapseSection();Render();
+    }
+    private bool OwnForeground()
+    {
+        var foreground=Native.GetForegroundWindow();if(foreground==0)return false;
+        Native.GetWindowThreadProcessId(foreground,out uint process);return process==(uint)Environment.ProcessId;
+    }
     private bool SideSections=>store.Get("sectionlayout","side")!="inline"&&Search.Text.Trim().Length==0;
     private StackPanel ClipRows=>buildingSection?sectionRows:Groups;
     private void RenderSideSection(List<ClipGroup> groups)
@@ -29,12 +46,17 @@ public sealed partial class MainWindow
     }
     private void PositionSection()
     {
-        if(exiting||!SideSections||sectionBorder is null||activeSection is null||!AppWindow.IsVisible||Root.XamlRoot is null){sectionPopup.IsOpen=false;return;}
+        if(exiting||windowResizing||dialogOpen||!SideSections||sectionBorder is null||activeSection is null||!AppWindow.IsVisible||Root.XamlRoot is null){sectionPopup.IsOpen=false;sectionFocusTimer.Stop();return;}
         var area=DisplayArea.GetFromWindowId(AppWindow.Id,DisplayAreaFallback.Nearest).WorkArea;double scale=Math.Max(1,Native.GetDpiForWindow(hwnd)/96d);
         var origin=new Native.Point();Native.ClientToScreen(hwnd,ref origin);
-        var bounds=SidePanelPlacement.Choose(AppWindow.Position.X,AppWindow.Position.Y,AppWindow.Size.Width,AppWindow.Size.Height,area.X,area.Y,area.Width,area.Height,(int)(360*scale),(int)(Math.Min(560,Math.Max(160,sectionRows.Children.Count*62))*scale),origin.Y+(int)(126*scale),(int)(8*scale));
+        var bounds=SidePanelPlacement.Choose(AppWindow.Position.X,AppWindow.Position.Y,AppWindow.Size.Width,AppWindow.Size.Height,area.X,area.Y,area.Width,area.Height,(int)(360*scale),(int)(Math.Min(560,Math.Max(160,sectionRows.Children.Count*62))*scale),origin.Y+(int)(40*scale),(int)(8*scale));
         sectionBorder.Width=bounds.Width/scale;sectionBorder.Height=bounds.Height/scale;sectionPopup.XamlRoot=Root.XamlRoot;
         sectionPopup.HorizontalOffset=(bounds.X-origin.X)/scale;sectionPopup.VerticalOffset=(bounds.Y-origin.Y)/scale;sectionPopup.IsOpen=true;
+        if(!isolated)
+        {
+            if(!sectionFocusTimerReady){sectionFocusTimer.Tick+=(_,_)=>{if(exiting||!sectionPopup.IsOpen){sectionFocusTimer.Stop();return;}DismissSectionForExternalFocus(!OwnForeground());};sectionFocusTimerReady=true;}
+            sectionFocusTimer.Start();
+        }
         if(animatedSection!=activeSection)
         {
             animatedSection=activeSection;sectionRows.RenderTransform=new TranslateTransform();

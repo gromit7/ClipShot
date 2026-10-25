@@ -16,7 +16,7 @@ public sealed partial class MainWindow
         "• "+T("Семь тем: градиентная, прозрачная, белая, чёрная, тёмная, Windows 98 и Windows XP."),
         "• "+T("Хранение истории: 30 дней, 90 дней или бессрочно; ручная очистка. Данные остаются на этом ПК."),
         "• "+T("Запуск с Windows, работа в трее, настройка горячих клавиш. Крестик, сворачивание и Esc скрывают окно; выход — в меню трея."),
-        "• "+T("Обновления с GitHub: проверка в фоне, установка по нажатию, сохранение данных, восстановление при ошибке и аварийный откат версии."),
+        "• "+T("Обновления с GitHub устанавливаются сами после пяти минут без мыши и клавиатуры, когда окно скрыто и редактор закрыт. Данные сохраняются; после обновления — плашка. Ручной режим — в настройках."),
         "• "+T("Русский язык по умолчанию; English и ссылка на открытый исходный код — в настройках.")});
     private ContentDialog CreateHelpDialog()=>new()
     {
@@ -26,7 +26,6 @@ public sealed partial class MainWindow
     private async void HelpClick(object sender,RoutedEventArgs e)
     {
         if(dialogOpen||exiting)return;
-        preview.IsOpen=false;hoverTimer.Stop();dialogOpen=true;
-        try{await CreateHelpDialog().ShowAsync();}finally{dialogOpen=false;}
+        preview.IsOpen=false;hoverTimer.Stop();await ShowDialogAsync(CreateHelpDialog());
     }
 }

@@ -6,9 +6,18 @@ public sealed partial class MainWindow
         try
         {
             var image=store.All().First(c=>c.Image is not null);
-            editor=await ScreenshotEditor.CreateAsync(image.Image!,words,Root.RequestedTheme);Hide();var result=editor.ShowAsync();
-            if(interactive){await result;editor=null;if(!exiting)ShowNearCursor();return;}
-            uint sequence=Native.GetClipboardSequenceNumber();var checks=await editor.CheckAsync();var png=await result;
+            var editing=EditImage(image);for(int attempt=0;attempt<30&&editor is null;attempt++)await Task.Delay(100);
+            var testedEditor=editor??throw new InvalidOperationException("Editor did not open");var result=testedEditor.ShowAsync();
+            if(interactive){await editing;if(!exiting)ShowNearCursor();return;}
+            uint sequence=Native.GetClipboardSequenceNumber();var checks=await testedEditor.CheckAsync(async()=>
+            {
+                if(dialogOpen)throw new InvalidOperationException("Editor incorrectly blocks global capture");
+                ToggleVisibility();if(testedEditor.AppWindow.IsVisible)throw new InvalidOperationException("Tray did not hide editor");
+                ToggleVisibility();if(!testedEditor.AppWindow.IsVisible)throw new InvalidOperationException("Tray did not restore editor");
+                TakeScreenshot();await Task.Delay(400);if(captureWindow is null)throw new InvalidOperationException("Capture did not open over editor");
+                captureWindow.Cancel();await Task.Delay(150);
+                if(!ReferenceEquals(editor,testedEditor)||testedEditor.IsClosed)throw new InvalidOperationException("Capture replaced or closed editor");
+            });var png=await result;await editing;
             checks.Add(sequence==Native.GetClipboardSequenceNumber()?"PASS editor test does not change system clipboard":"FAIL system clipboard changed");
             checks.Add(png is not null?"PASS edited image is available to the calling window":"FAIL missing result");
             File.WriteAllLines(Path.Combine(dataFolder,"editor-checks.txt"),checks);
