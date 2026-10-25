@@ -24,7 +24,7 @@
   </Grid.Resources>
   <Grid.RowDefinitions><RowDefinition Height="56"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
   <Border x:Name="HeaderSurface" Background="{ThemeResource ClipHeaderBrush}" BorderBrush="{ThemeResource ClipSeparatorBrush}" BorderThickness="0,0,0,1">
-   <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="36"/><ColumnDefinition Width="44"/><ColumnDefinition Width="52"/></Grid.ColumnDefinitions>
+   <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="36"/><ColumnDefinition Width="44"/><ColumnDefinition x:Name="CaptionSpace" Width="104"/></Grid.ColumnDefinitions>
     <Grid x:Name="TitleDragRegion" Background="Transparent" Padding="20,0,0,0">
      <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
       <FontIcon x:Name="TitleGlyph" Glyph="&#xE77F;" FontSize="23"/>
@@ -46,9 +46,9 @@
    <StackPanel Spacing="9">
     <TextBlock x:Name="Status" Text="" Visibility="Collapsed" FontSize="12" TextWrapping="Wrap"/>
     <StackPanel Orientation="Horizontal" Spacing="14">
-     <StackPanel Orientation="Horizontal" Spacing="6"><Border BorderBrush="{ThemeResource ClipSeparatorBrush}" BorderThickness="1" CornerRadius="3" Padding="5,2"><TextBlock Text="↑↓" FontSize="12"/></Border><TextBlock Text="Выбрать" FontSize="11" Foreground="{ThemeResource ClipSecondaryBrush}" VerticalAlignment="Center"/></StackPanel>
-     <StackPanel Orientation="Horizontal" Spacing="6"><Border BorderBrush="{ThemeResource ClipSeparatorBrush}" BorderThickness="1" CornerRadius="3" Padding="5,2"><TextBlock Text="Enter" FontSize="12"/></Border><TextBlock Text="Копировать" FontSize="11" Foreground="{ThemeResource ClipSecondaryBrush}" VerticalAlignment="Center"/></StackPanel>
-     <StackPanel Orientation="Horizontal" Spacing="6"><Border BorderBrush="{ThemeResource ClipSeparatorBrush}" BorderThickness="1" CornerRadius="3" Padding="5,2"><TextBlock Text="Esc" FontSize="12"/></Border><TextBlock Text="Закрыть" FontSize="11" Foreground="{ThemeResource ClipSecondaryBrush}" VerticalAlignment="Center"/></StackPanel>
+     <StackPanel Orientation="Horizontal" Spacing="6"><Border BorderBrush="{ThemeResource ClipSeparatorBrush}" BorderThickness="1" CornerRadius="3" Padding="5,2"><TextBlock Text="↑↓" FontSize="12"/></Border><TextBlock x:Name="SelectHint" Text="Выбрать" FontSize="11" Foreground="{ThemeResource ClipSecondaryBrush}" VerticalAlignment="Center"/></StackPanel>
+     <StackPanel Orientation="Horizontal" Spacing="6"><Border BorderBrush="{ThemeResource ClipSeparatorBrush}" BorderThickness="1" CornerRadius="3" Padding="5,2"><TextBlock Text="Enter" FontSize="12"/></Border><TextBlock x:Name="CopyHint" Text="Копировать" FontSize="11" Foreground="{ThemeResource ClipSecondaryBrush}" VerticalAlignment="Center"/></StackPanel>
+     <StackPanel Orientation="Horizontal" Spacing="6"><Border BorderBrush="{ThemeResource ClipSeparatorBrush}" BorderThickness="1" CornerRadius="3" Padding="5,2"><TextBlock Text="Esc" FontSize="12"/></Border><TextBlock x:Name="CloseHint" Text="Закрыть" FontSize="11" Foreground="{ThemeResource ClipSecondaryBrush}" VerticalAlignment="Center"/></StackPanel>
     </StackPanel>
    </StackPanel>
   </Border>

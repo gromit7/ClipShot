@@ -13,6 +13,21 @@ internal static class Native
     [DllImport("user32.dll",SetLastError=true)] internal static extern bool RegisterHotKey(nint h,int id,uint modifiers,uint key);
     [DllImport("user32.dll")] internal static extern bool UnregisterHotKey(nint h,int id);
     [DllImport("user32.dll")] internal static extern bool GetCursorPos(out Point p);
+    [DllImport("user32.dll")] internal static extern nint GetForegroundWindow();
+    [DllImport("user32.dll")] internal static extern short GetAsyncKeyState(int key);
+    [DllImport("user32.dll")] internal static extern nint GetAncestor(nint window,uint flags);
+    [DllImport("user32.dll")] internal static extern bool IsWindow(nint window);
+    [DllImport("user32.dll")] internal static extern bool IsIconic(nint window);
+    [DllImport("user32.dll")] internal static extern uint GetWindowThreadProcessId(nint window,out uint process);
+    [DllImport("user32.dll")] internal static extern bool GetGUIThreadInfo(uint thread,ref GuiThreadInfo info);
+    [DllImport("user32.dll",SetLastError=true)] internal static extern uint SendInput(uint count,[In] KeyboardInput[] inputs,int size);
+    [StructLayout(LayoutKind.Sequential)] internal struct GuiThreadInfo {public uint Size,Flags;public nint Active,Focus,Capture,MenuOwner,MoveSize,Caret;public int Left,Top,Right,Bottom;}
+    [StructLayout(LayoutKind.Explicit,Size=40)] internal struct KeyboardInput
+    {
+        [FieldOffset(0)]public uint Type;[FieldOffset(8)]public ushort Key;[FieldOffset(10)]public ushort Scan;
+        [FieldOffset(12)]public uint Flags;[FieldOffset(16)]public uint Time;[FieldOffset(24)]public nint Extra;
+    }
+    internal static KeyboardInput KeyInput(ushort key,bool up)=>new(){Type=1,Key=key,Flags=up?2u:0u};
     [DllImport("user32.dll")] internal static extern uint GetDpiForWindow(nint h);
     [DllImport("user32.dll")] internal static extern bool SetForegroundWindow(nint h);
     [DllImport("user32.dll")] internal static extern nint LoadIcon(nint instance,nint name);

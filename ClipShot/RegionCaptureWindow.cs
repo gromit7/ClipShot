@@ -15,6 +15,7 @@ namespace ClipShot;
 internal sealed class RegionCaptureWindow : Window
 {
     private readonly ScreenFrame frame;
+    private readonly UiText words;
     private readonly Grid surface=new Grid();
     private readonly nint cursor,hwnd,previousProcedure;
     private readonly Native.WndProc cursorProcedure;
@@ -32,9 +33,9 @@ internal sealed class RegionCaptureWindow : Window
     private readonly TaskCompletionSource<ScreenFrame?> completion=new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int startX,startY;private bool dragging,finished;
     private readonly bool test;
-    public RegionCaptureWindow(ScreenFrame frame,bool test=false)
+    public RegionCaptureWindow(ScreenFrame frame,bool test=false,UiText? language=null)
     {
-        this.frame=frame;this.test=test;Title="ClipShot — выделение области";
+        words=language??new UiText("ru");this.frame=frame;this.test=test;Title=words.Translate("ClipShot — выделение области");
         cursor=Native.LoadCursorFromFile(System.IO.Path.Combine(AppContext.BaseDirectory,"Assets","Selection.cur"));
         if(cursor==0)throw new System.ComponentModel.Win32Exception();
         hwnd=WinRT.Interop.WindowNative.GetWindowHandle(this);cursorProcedure=CursorMessage;
@@ -45,7 +46,7 @@ internal sealed class RegionCaptureWindow : Window
         var bitmap=new WriteableBitmap(frame.Width,frame.Height);using(var stream=bitmap.PixelBuffer.AsStream())stream.Write(frame.Pixels);bitmap.Invalidate();background.Source=bitmap;clear.Source=bitmap;clear.Clip=clip;
         surface.Children.Add(background);surface.Children.Add(new Border{Background=new SolidColorBrush(Windows.UI.Color.FromArgb(165,0,0,0))});surface.Children.Add(clear);
         guides.Children.Add(outlineShadow);guides.Children.Add(outline);foreach(var corner in corners)guides.Children.Add(corner);guides.Children.Add(sizeBadge);surface.Children.Add(guides);
-        surface.Children.Add(new Border{Background=new SolidColorBrush(Windows.UI.Color.FromArgb(230,32,32,32)),CornerRadius=new CornerRadius(8),Padding=new Thickness(18,10,18,10),Margin=new Thickness(20),HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Top,IsHitTestVisible=false,Child=new TextBlock{Text="Выделите область мышью · Esc — отмена",Foreground=new SolidColorBrush(Microsoft.UI.Colors.White)}});
+        surface.Children.Add(new Border{Background=new SolidColorBrush(Windows.UI.Color.FromArgb(230,32,32,32)),CornerRadius=new CornerRadius(8),Padding=new Thickness(18,10,18,10),Margin=new Thickness(20),HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Top,IsHitTestVisible=false,Child=new TextBlock{Text=words.Translate("Выделите область мышью · Esc — отмена"),Foreground=new SolidColorBrush(Microsoft.UI.Colors.White)}});
         focus.Content=surface;Content=focus;
         surface.PointerPressed+=Pressed;surface.PointerMoved+=Moved;surface.PointerReleased+=Released;
         surface.PointerEntered+=(_,_)=>Native.SetCursor(cursor);
@@ -89,7 +90,7 @@ internal sealed class RegionCaptureWindow : Window
         clip.Rect=new Rect(r.X*sx,r.Y*sy,r.Width*sx,r.Height*sy);
         PositionBorder(outlineShadow,r,sx,sy);PositionBorder(outline,r,sx,sy);
         for(int i=0;i<4;i++){corners[i].Visibility=Visibility.Visible;Canvas.SetLeft(corners[i],(r.X+(i%2)*r.Width)*sx-4);Canvas.SetTop(corners[i],(r.Y+(i/2)*r.Height)*sy-4);}
-        dimensions.Text=$"{r.Width} × {r.Height} пикс.";sizeBadge.Visibility=Visibility.Visible;
+        dimensions.Text=$"{r.Width} × {r.Height} {words.Translate("пикс.")}";sizeBadge.Visibility=Visibility.Visible;
         Canvas.SetLeft(sizeBadge,Math.Clamp(r.X*sx,4,Math.Max(4,surface.ActualWidth-180)));Canvas.SetTop(sizeBadge,r.Y*sy>=42?r.Y*sy-38:Math.Min(surface.ActualHeight-38,(r.Y+r.Height)*sy+10));
     }
     private static void PositionBorder(Rectangle border,PixelRegion r,double sx,double sy)

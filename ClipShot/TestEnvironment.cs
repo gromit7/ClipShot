@@ -2,7 +2,7 @@ namespace ClipShot;
 
 public static class TestEnvironment
 {
-    private static readonly string[] TestFlags = ["--smoke-test", "--demo", "--capture-self-test", "--capture-demo", "--shell-test", "--interaction-self-test", "--upgrade-self-test"];
+    private static readonly string[] TestFlags = ["--smoke-test", "--demo", "--capture-self-test", "--capture-demo", "--shell-test", "--interaction-self-test", "--upgrade-self-test", "--editor-self-test", "--editor-demo"];
     public static bool IsIsolated(IEnumerable<string> args) => args.Any(TestFlags.Contains);
     public static string DataFolder(bool isolated, string? testRoot = null)
     {

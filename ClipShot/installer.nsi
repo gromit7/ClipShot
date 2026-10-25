@@ -5,7 +5,7 @@
 !include "WinVer.nsh"
 !include "FileFunc.nsh"
 !ifndef VERSION
-!define VERSION "0.5.1"
+!define VERSION "0.6.0"
 !endif
 Var TestRoot
 Name "ClipShot"

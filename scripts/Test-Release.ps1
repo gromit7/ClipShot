@@ -39,6 +39,7 @@ try{
             @{Name='ThemeWindowsXP';Args='--smoke-test --theme=WindowsXP';Report='ui-ok.txt';Theme='WindowsXP'},
             @{Name='Search, templates, clear, focus and themes';Args='--interaction-self-test';Report='interaction-checks.txt'},
             @{Name='Synthetic selection, PNG and cancel';Args='--capture-self-test';Report='capture-checks.txt'}
+            @{Name='Screenshot editor, arrows and export';Args='--editor-self-test';Report='editor-checks.txt'}
         )){
             Step $case.Name {
                 $env:CLIPSHOT_TEST_ROOT=Join-Path ([IO.Path]::GetTempPath()) ('ClipShot.Tests/'+[guid]::NewGuid().ToString('N'))

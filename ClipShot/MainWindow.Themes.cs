@@ -36,6 +36,7 @@ public sealed partial class MainWindow
         FooterSurface.Background=new SolidColorBrush(ThemeColor(activeTheme.Acrylic?"#B0202125":activeTheme.Window));
         var bg=ThemeColor(activeTheme.Header);var fg=ThemeColor(activeTheme.Title);
         var bar=AppWindow.TitleBar;
+        CaptionSpace.Width=new GridLength(Math.Max(96,bar.RightInset)+8);
         bar.BackgroundColor=bg;bar.ForegroundColor=fg;bar.ButtonBackgroundColor=bg;bar.ButtonForegroundColor=fg;
         bar.InactiveBackgroundColor=bg;bar.ButtonInactiveBackgroundColor=bg;bar.ButtonInactiveForegroundColor=fg;
     }

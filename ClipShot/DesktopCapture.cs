@@ -45,10 +45,10 @@ internal static class DesktopCapture
             if(bitmap!=0)DeleteObject(bitmap);if(memory!=0)DeleteDC(memory);if(screen!=0)ReleaseDC(0,screen);
         }
     }
-    public static async Task<byte[]> Png(ScreenFrame frame)
+    public static async Task<byte[]> Png(ScreenFrame frame,BitmapAlphaMode alpha=BitmapAlphaMode.Ignore)
     {
         using var stream=new InMemoryRandomAccessStream();var encoder=await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId,stream);
-        encoder.SetPixelData(BitmapPixelFormat.Bgra8,BitmapAlphaMode.Ignore,(uint)frame.Width,(uint)frame.Height,96,96,frame.Pixels);await encoder.FlushAsync();stream.Seek(0);
+        encoder.SetPixelData(BitmapPixelFormat.Bgra8,alpha,(uint)frame.Width,(uint)frame.Height,96,96,frame.Pixels);await encoder.FlushAsync();stream.Seek(0);
         byte[] png=new byte[(int)stream.Size];using var reader=new DataReader(stream);await reader.LoadAsync((uint)png.Length);reader.ReadBytes(png);return png;
     }
 }
