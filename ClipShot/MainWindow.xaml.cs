@@ -540,7 +540,7 @@ public sealed partial class MainWindow : Window
         {
             timer.Stop();Directory.CreateDirectory(dataFolder);
             var p=SettingsButton.TransformToVisual(Root).TransformPoint(new Windows.Foundation.Point(0,0));
-            bool layout=Search.Visibility==Visibility.Collapsed&&SearchToggle.ActualHeight>=30&&SearchToggle.ActualWidth>=30&&Search.PlaceholderText.Length==0&&Search.TransformToVisual(Root).TransformPoint(new Windows.Foundation.Point()).Y>=HistoryScroll.ActualHeight&&HeaderSurface.Visibility==Visibility.Collapsed&&Root.ContextFlyout is MenuFlyout;
+            bool layout=Search.Visibility==Visibility.Collapsed&&SearchToggle.ActualHeight>=30&&SearchToggle.ActualWidth>=30&&Search.PlaceholderText.Length==0&&SearchToggle.TransformToVisual(Root).TransformPoint(new Windows.Foundation.Point()).Y>=HistoryScroll.ActualHeight&&HeaderSurface.Visibility==Visibility.Collapsed&&Root.ContextFlyout is MenuFlyout;
             bool pass=layout&&Root.XamlRoot is not null&&visible.Count==6;
             File.WriteAllText(Path.Combine(dataFolder,"ui-ok.txt"),$"{(pass?"PASS":"FAIL")} WinUI launched; visible rows={visible.Count}; XamlRoot={Root.XamlRoot is not null}; Theme={Root.ActualTheme}; ThemeId={activeTheme.Id}; Acrylic={SystemBackdrop is DesktopAcrylicBackdrop}; Layout={layout}; CaptionInset={AppWindow.TitleBar.RightInset}; SearchWidth={Search.ActualWidth}; SettingsX={p.X}");
             if(Environment.GetCommandLineArgs().Contains("--interaction-self-test"))pass=await RunInteractionChecks()&&pass;
