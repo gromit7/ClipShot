@@ -1,4 +1,4 @@
-param([string]$MakeNsis,[switch]$SkipBuild,[switch]$SkipDesktop,[switch]$PublishInstaller)
+﻿param([string]$MakeNsis,[switch]$SkipBuild,[switch]$SkipDesktop,[switch]$PublishInstaller)
 $ErrorActionPreference='Stop'
 $repo=Split-Path $PSScriptRoot
 $reports=Join-Path $repo 'TestResults'
@@ -22,7 +22,7 @@ try{
     $project=[xml](Get-Content -LiteralPath (Join-Path $repo 'ClipShot/ClipShot.csproj') -Raw)
     $version=[string]$project.Project.PropertyGroup.Version
     Step 'Publication contents and version' {
-        foreach($name in 'ClipShot.exe','ClipShot.dll','ClipShot.pri','ClipShot.runtimeconfig.json','Assets/ClipShot.ico','Assets/Selection.cur'){
+        foreach($name in 'ClipShot.exe','ClipShot.dll','ClipShot.pri','ClipShot.runtimeconfig.json','LICENSE','Assets/ClipShot.ico','Assets/ClipShot.Muted.ico','Assets/ClipShot.png','Assets/Selection.cur'){
             if(-not(Test-Path -LiteralPath (Join-Path $publication $name))){throw "Missing $name"}
         }
         if((Get-Item -LiteralPath $app).VersionInfo.ProductVersion.Split('+')[0] -ne $version){throw 'Wrong published version'}

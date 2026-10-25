@@ -52,7 +52,7 @@ public sealed class UiText(string? language)
         ["Протяните стрелку или рамку · Shift — выравнивание · Ctrl+Z — отменить · Enter — копировать и закрыть"]="Drag an arrow or rectangle · Shift to align · Ctrl+Z to undo · Enter to copy and close",
         ["Вставлять в предыдущее приложение"]="Paste into the previous application",
         ["Только если там доступен текстовый курсор. По умолчанию клип лишь копируется в буфер."]="Only when a text caret is available there. By default, clips are only copied to the clipboard.",
-        ["Переключить"]="Toggle",["Микрофон"]="Microphone",
+        ["Исходный код и лицензия"]="Source code and licence",["Переключить"]="Toggle",["Микрофон"]="Microphone",
         ["Микрофон включён"]="Microphone on",
         ["Микрофон выключен"]="Microphone muted",
         ["Часть микрофонов включена"]="Some microphones are on",

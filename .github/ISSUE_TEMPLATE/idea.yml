@@ -1,0 +1,14 @@
+name: Предложение
+description: Предложить улучшение ClipShot
+title: "[Предложение] "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Какую задачу хотите решить
+    validations:
+      required: true
+  - type: textarea
+    id: behaviour
+    attributes:
+      label: Как это должно работать

@@ -1,4 +1,4 @@
-<Window x:Class="ClipShot.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+﻿<Window x:Class="ClipShot.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
  <Grid x:Name="Root" MinWidth="400">
   <Grid.Resources>
    <ResourceDictionary><ResourceDictionary.ThemeDictionaries>
@@ -27,7 +27,7 @@
    <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="36"/><ColumnDefinition Width="44"/><ColumnDefinition x:Name="CaptionSpace" Width="104"/></Grid.ColumnDefinitions>
     <Grid x:Name="TitleDragRegion" Background="Transparent" Padding="20,0,0,0">
      <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-      <FontIcon x:Name="TitleGlyph" Glyph="&#xE77F;" FontSize="23"/>
+      <Image x:Name="TitleGlyph" Source="ms-appx:///Assets/ClipShot.png" Width="28" Height="28" Stretch="Uniform"/>
       <TextBlock x:Name="TitleText" Text="ClipShot" FontSize="19" FontWeight="SemiBold" VerticalAlignment="Center"/>
      </StackPanel>
     </Grid>

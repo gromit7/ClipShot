@@ -1,4 +1,4 @@
-using Microsoft.UI.Xaml;
+﻿using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI;
@@ -24,7 +24,7 @@ public sealed partial class MainWindow
         SystemBackdrop=activeTheme.Acrylic?new DesktopAcrylicBackdrop():null;
         Search.Foreground=primaryBrush;Search.FontFamily=new FontFamily(activeTheme.Font);Search.CornerRadius=new CornerRadius(activeTheme.Corner);
         Search.BorderThickness=new Thickness(activeTheme.Id=="Windows98"?2:1);
-        TitleText.FontFamily=new FontFamily(activeTheme.Font);TitleText.Foreground=titleBrush;TitleGlyph.Foreground=titleBrush;SettingsButton.Foreground=titleBrush;HelpButton.Foreground=titleBrush;
+        TitleText.FontFamily=new FontFamily(activeTheme.Font);TitleText.Foreground=titleBrush;SettingsButton.Foreground=titleBrush;HelpButton.Foreground=titleBrush;
         PaintText(FooterSurface,primaryBrush);
         StyleTitleBar();
     }

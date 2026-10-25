@@ -1,0 +1,20 @@
+name: Ошибка в программе
+description: Сообщить о воспроизводимой ошибке ClipShot
+title: "[Ошибка] "
+body:
+  - type: markdown
+    attributes:
+      value: "Не прикладывайте личную историю буфера, пароли и секретные снимки."
+  - type: input
+    id: version
+    attributes:
+      label: Версия ClipShot и Windows
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Как повторить ошибку
+      description: Действия, ожидаемый и фактический результат.
+    validations:
+      required: true

@@ -1,4 +1,4 @@
-name: Build and tests
+name: Сборка и тесты
 on:
   push:
   pull_request:
@@ -14,16 +14,23 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - name: Build, test and publish
+      - name: Сборка, тесты и публикация
         shell: pwsh
         run: ./scripts/Build.ps1 -Test -Publish
-      - name: Validate publication
+      - name: Проверка пакета
         shell: pwsh
         run: ./scripts/Test-Release.ps1 -SkipBuild -SkipDesktop
-      - name: Test reports
+      - name: Отчёты тестов
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
           path: TestResults/
           retention-days: 14
+
+      - name: Сборка для независимой проверки
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClipShot-windows-x64
+          path: ClipShot-app/
+          retention-days: 30

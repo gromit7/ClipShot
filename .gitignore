@@ -3,6 +3,9 @@
 !/.gitattributes
 !/AGENTS.md
 !/README.md
+!/LICENSE
+!/LICENSE.ru.md
+!/CONTRIBUTING.md
 !/global.json
 !/ClipShot/
 !/ClipShot.Checks/

@@ -257,14 +257,14 @@ public sealed partial class MainWindow : Window
     }
     private void AddGroup(string title,List<Clip> clips,bool searching)
     {
-        if(searching&&clips.Count==0)return;
+        if(clips.Count==0)return;
         bool open=searching||expanded.GetValueOrDefault(title);
         var heading=new Grid{ColumnSpacing=10};heading.ColumnDefinitions.Add(new(){Width=new GridLength(14)});heading.ColumnDefinitions.Add(new(){Width=new GridLength(20)});heading.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});heading.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
         var arrow=new FontIcon{Glyph=open?"\uE70D":"\uE76C",FontSize=11};heading.Children.Add(arrow);
         if(title is "Шаблоны" or "Сегодня"){var icon=new FontIcon{Glyph=title=="Шаблоны"?"\uE8A5":"\uE823",FontSize=18,Foreground=ClipBrush("ClipSecondaryBrush")};Grid.SetColumn(icon,1);heading.Children.Add(icon);}
-        var label=new TextBlock{Text=T(title),FontSize=14,FontWeight=Microsoft.UI.Text.FontWeights.SemiBold};Grid.SetColumn(label,2);heading.Children.Add(label);
-        var count=new TextBlock{Text=clips.Count.ToString(),FontSize=13,Foreground=ClipBrush("ClipSecondaryBrush")};Grid.SetColumn(count,3);heading.Children.Add(count);
-        var button=new Button{Content=heading,Height=46,CornerRadius=new CornerRadius(0),HorizontalAlignment=HorizontalAlignment.Stretch,HorizontalContentAlignment=HorizontalAlignment.Stretch,Background=new SolidColorBrush(Microsoft.UI.Colors.Transparent),BorderThickness=new Thickness(0),Padding=new Thickness(18,0,20,0)};
+        var label=new TextBlock{Text=T(title),FontSize=12,CharacterSpacing=30,FontWeight=Microsoft.UI.Text.FontWeights.SemiBold};Grid.SetColumn(label,2);heading.Children.Add(label);
+        var count=new TextBlock{Text=clips.Count.ToString(),FontSize=11,Foreground=ClipBrush("ClipSecondaryBrush")};Grid.SetColumn(count,3);heading.Children.Add(count);
+        var button=new Button{Content=heading,Height=40,CornerRadius=new CornerRadius(0),HorizontalAlignment=HorizontalAlignment.Stretch,HorizontalContentAlignment=HorizontalAlignment.Stretch,Background=ClipBrush("ClipHeaderBrush"),BorderThickness=new Thickness(0),Padding=new Thickness(18,0,20,0)};
         button.Click+=(_,_)=>{expanded[title]=!open;Render();};Groups.Children.Add(new Border{Child=button,BorderBrush=ClipBrush("ClipSeparatorBrush"),BorderThickness=new Thickness(0,0,0,1)});
         if(!open)return;
         foreach(var clip in clips)
@@ -408,6 +408,7 @@ public sealed partial class MainWindow : Window
         panel.Children.Add(new TextBlock{Text=T("Шаблоны не удаляются. Данные хранятся только на этом ПК."),TextWrapping=TextWrapping.Wrap,MaxWidth=340,Opacity=.65,FontSize=12});
         panel.Children.Add(new TextBlock{Text=$"ClipShot {typeof(App).Assembly.GetName().Version?.ToString(3)} · {T("буфер обмена и скриншоты")}",TextWrapping=TextWrapping.Wrap,MaxWidth=340,Opacity=.65,FontSize=12});
         var language=new ComboBox{Header=T("Язык интерфейса"),MaxWidth=200,HorizontalAlignment=HorizontalAlignment.Left};language.Items.Add("Русский");language.Items.Add("English");language.SelectedIndex=words.English?1:0;panel.Children.Add(language);
+        panel.Children.Add(new HyperlinkButton{Content=T("Исходный код и лицензия"),NavigateUri=new Uri("https://github.com/gromit7/ClipShot"),Padding=new Thickness(0),HorizontalAlignment=HorizontalAlignment.Left});
         var dialog=new ContentDialog{Title=T("Настройки ClipShot"),Content=new ScrollViewer{Content=panel,MaxHeight=Math.Max(200,Root.ActualHeight-180),VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled},PrimaryButtonText=T("Сохранить"),CloseButtonText=T("Отмена"),XamlRoot=Root.XamlRoot,RequestedTheme=Root.RequestedTheme};
         dialog.PrimaryButtonClick+=(_,args)=>
         {

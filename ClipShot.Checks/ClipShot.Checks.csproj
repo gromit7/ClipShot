@@ -4,7 +4,7 @@
  <ItemGroup>
   <Compile Include="../ClipShot/HistoryView.cs" Link="HistoryView.cs"/><Compile Include="../ClipShot/AppSettings.cs" Link="AppSettings.cs"/><Compile Include="../ClipShot/TestEnvironment.cs" Link="TestEnvironment.cs"/>
   <Compile Include="../ClipShot/AppTheme.cs" Link="AppTheme.cs"/>
-  <None Include="../ClipShot/Assets/ClipShot.ico" Link="Assets/ClipShot.ico" CopyToOutputDirectory="PreserveNewest"/><Compile Include="../ClipShot/TrayIconRenderer.cs" Link="TrayIconRenderer.cs"/>
+  <None Include="../ClipShot/Assets/ClipShot.Muted.ico" Link="Assets/ClipShot.Muted.ico" CopyToOutputDirectory="PreserveNewest"/><None Include="../ClipShot/Assets/ClipShot.ico" Link="Assets/ClipShot.ico" CopyToOutputDirectory="PreserveNewest"/><Compile Include="../ClipShot/TrayIconRenderer.cs" Link="TrayIconRenderer.cs"/>
   <Compile Include="../ClipShot/Microphones.cs" Link="Microphones.cs"/><Compile Include="../ClipShot/CoreAudioMicrophones.cs" Link="CoreAudioMicrophones.cs"/>
   <Compile Include="../ClipShot/UiText.cs" Link="UiText.cs"/>
   <Compile Include="../ClipShot/Annotations.cs" Link="Annotations.cs"/><Compile Include="../ClipShot/AnnotationRenderer.cs" Link="AnnotationRenderer.cs"/>

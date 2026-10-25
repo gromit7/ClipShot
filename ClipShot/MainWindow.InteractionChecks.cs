@@ -11,6 +11,7 @@ public sealed partial class MainWindow
         void Check(bool ok,string name){results.Add($"{(ok?"PASS":"FAIL")} {name}");}
         try
         {
+            Check(Groups.Children.Count==visible.Count+2,"empty date sections are hidden without a search");
             Search.Text="EXAMPLE";
             await Task.Delay(100);
             Check(visible.Count==2&&visible.All(v=>v.Clip.Kind=="text"),"case insensitive text search across templates and history");
@@ -18,6 +19,7 @@ public sealed partial class MainWindow
             Search.Text="NOT_FOUND_5a82";
             await Task.Delay(100);
             Check(visible.Count==0&&selected==-1,"empty search has no selection");
+            Check(Groups.Children.Count==1&&Groups.Children[0] is Microsoft.UI.Xaml.Controls.TextBlock,"empty search shows one message and no section headings");
             Search.Text="";
             await Task.Delay(100);
             Check(visible.Count==6&&selected==0,"clearing search restores rows and selection");
@@ -26,6 +28,7 @@ public sealed partial class MainWindow
             Check(visible.Count(v=>v.Clip.Id==id)==1&&visible.First(v=>v.Clip.Id==id).Clip.Template,"moving to templates does not duplicate rows");
             store.Clear();Render();
             Check(visible.Count==2&&visible.All(v=>v.Clip.Template),"clear history preserves templates in UI");
+            Check(Groups.Children.Count==3,"template-only history does not show empty date headings");
             store.Set("days","broken");Prune();
             Check(visible.Count==2,"invalid retention value does not crash");
             store.Set("theme","Light");ApplyTheme();Render();
@@ -70,6 +73,8 @@ public sealed partial class MainWindow
             foreach(var state in Enum.GetValues<MicrophoneState>()){nint icon=MicrophoneIcon(state);Check(icon!=0,"shared ClipShot tray icon "+state);if(icon!=0)Native.DestroyIcon(icon);}
             Native.PostMessage(hwnd,0x0112,0xF020,0);await Task.Delay(150);
             Check(!AppWindow.IsVisible,"minimize hides the window to the tray");ShowNearCursor();
+            foreach(var clip in store.All())store.Delete(clip.Id);Render();
+            Check(Groups.Children.Count==1&&Groups.Children[0] is Microsoft.UI.Xaml.Controls.TextBlock,"completely empty history has no empty templates heading");
         }
         catch(Exception e){results.Add("FAIL "+e.GetType().Name+": "+e.Message);}
         File.WriteAllLines(Path.Combine(dataFolder,"interaction-checks.txt"),results);
