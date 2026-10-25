@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
 
 namespace ClipShot;
@@ -11,6 +11,14 @@ public sealed partial class MainWindow
         void Check(bool ok,string name){results.Add($"{(ok?"PASS":"FAIL")} {name}");}
         try
         {
+            Check(TrayTip.Contains(typeof(App).Assembly.GetName().Version!.ToString(3)),"tray tooltip includes installed version");
+            Check(ManualUpdateLink.Visibility==Visibility.Visible&&ManualUpdateLink.IsEnabled&&ManualUpdateLink.Content.ToString()=="Проверить обновление","quiet manual update action is always visible at bottom");
+            preparedInstaller="synthetic-not-executed.exe";updateMetadataValid=true;ShowUpdateOffer();
+            Check(updatePulseActive&&ManualUpdateLink.Content.ToString()=="Обновить сейчас","verified prepared update changes caption and starts gentle reminder");
+            updateLaunchRequested=true;ShowUpdateOffer();
+            Check(!ManualUpdateLink.IsEnabled&&!updatePulseActive&&ManualUpdateLink.Content.ToString()=="Устанавливаем обновление…","pressing update gives visible feedback and prevents repeated clicks");
+            updateLaunchRequested=false;preparedInstaller=null;updateMetadataValid=false;ShowUpdateOffer();
+            Check(!updatePulseActive&&ManualUpdateLink.IsEnabled,"clearing prepared update removes the reminder");
             Check(Groups.Children.Count==visible.Count+2,"empty date sections are hidden without a search");
             store.Set("sectionlayout","side");Render();await Task.Delay(150);
             Check(Groups.Children.Count==1&&TemplateGroups.Children.Count==1&&sectionPopup.IsOpen&&visible.Count==5,"compact panel keeps dates above bottom templates and opens today beside it");
@@ -41,7 +49,7 @@ public sealed partial class MainWindow
             Check(AutomaticUpdates&&!CanAutoInstall(),"automatic install is default but isolated UI cannot install");
             Native.PostMessage(hwnd,App.UpdateQuitMessage,(nint)unchecked((uint)Environment.TickCount+5000),0);await Task.Delay(100);
             Check(!exiting&&AppWindow.IsVisible,"automatic shutdown request cannot close an active test window");
-            store.Set("updateinstall","manual");Check(!AutomaticUpdates,"manual mode explicitly disables automatic install");store.Set("updateinstall","auto");
+            store.Set("updateinstall","manual");Check(AutomaticUpdates,"legacy manual preference keeps background updates enabled");store.Set("updateinstall","auto");
             Search.Text="EXAMPLE";
             await Task.Delay(100);
             Check(visible.Count==2&&visible.All(v=>v.Clip.Kind=="text"),"case insensitive text search across templates and history");
@@ -95,6 +103,8 @@ public sealed partial class MainWindow
             Native.PostMessage(hwnd,0x0112,0xF020,0);await Task.Delay(250);
             Check(!AppWindow.IsVisible&&!dialogOpen&&activeDialog is null,"minimize dismisses settings and clears modal state");
             Check(AppWindow.Size.Width<400&&AppWindow.Size.Height<300,"closing settings restores compact bounds");
+            ShowNearCursor();SettingsClick(this,new());await Task.Delay(200);await CheckUpdatesFromTray();
+            Check(!dialogOpen&&activeDialog is null,"manual check closes settings without saving and isolated UI never accesses network");
             ShowNearCursor();TakeScreenshot();await Task.Delay(400);
             Check(captureWindow is not null,"capture works after settings were minimized");captureWindow?.Cancel();await Task.Delay(150);
             store.Add("text","Настройки");Render();long untranslated=store.All().First(c=>c.Text=="Настройки").Id;

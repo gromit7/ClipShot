@@ -5,13 +5,22 @@
 !include "WinVer.nsh"
 !include "FileFunc.nsh"
 !ifndef VERSION
-!define VERSION "0.7.2"
+!define VERSION "0.7.3"
+!endif
+!ifndef PUBLICATION_DIR
+!define PUBLICATION_DIR "..\ClipShot-app"
 !endif
 Var TestRoot
 Var InstallResult
 Var InstallMutex
 Var UpdaterToken
 Var AutomaticInstall
+Var StartupInstall
+Var InstallBackup
+Var FailedInstall
+Var OriginalInstall
+Var TransactionPrepared
+Var TransactionCommitted
 Name "ClipShot"
 OutFile "..\ClipShot-Setup-${VERSION}.exe"
 InstallDir "$LOCALAPPDATA\Programs\ClipShot"
@@ -92,6 +101,15 @@ Function .onInit
   ${IfNot} ${Errors}
     StrCpy $AutomaticInstall "1"
   ${EndIf}
+  ClearErrors
+  ${GetOptions} $0 "/STARTUP" $1
+  StrCpy $StartupInstall "0"
+  ${IfNot} ${Errors}
+    StrCpy $StartupInstall "1"
+  ${EndIf}
+  StrCpy $OriginalInstall "0"
+  StrCpy $TransactionPrepared "0"
+  StrCpy $TransactionCommitted "0"
   StrCpy $3 "Local\ClipShot.Setup.v1"
   ${If} $TestRoot != ""
     StrCpy $3 "Local\ClipShot.Test.Setup.v1"
@@ -131,6 +149,82 @@ Function .onInit
   ${EndIf}
 FunctionEnd
 
+; Сначала сохраняем исходный каталог целиком. Если его нельзя переименовать,
+; поставляемые файлы ещё не затронуты: блокировка DLL не оставит смешанную версию.
+Function PrepareInstallTransaction
+  System::Call 'ole32::CoCreateGuid(g .r0) i.r1'
+  ${If} $1 != 0
+    SetErrorLevel 3
+    Abort "Не удалось подготовить безопасное обновление. Файлы программы не изменены."
+  ${EndIf}
+  StrCpy $InstallBackup "$INSTDIR.ClipShot-backup-$0"
+  StrCpy $FailedInstall "$INSTDIR.ClipShot-failed-$0"
+  IfFileExists "$INSTDIR\." 0 create_install_directory
+    ClearErrors
+    Rename "$INSTDIR" "$InstallBackup"
+    ${If} ${Errors}
+      SetErrorLevel 3
+      Abort "Не удалось сохранить предыдущую установку. Закройте ClipShot и повторите. Файлы программы не изменены."
+    ${EndIf}
+    StrCpy $OriginalInstall "1"
+  create_install_directory:
+  StrCpy $TransactionPrepared "1"
+  ClearErrors
+  CreateDirectory "$INSTDIR"
+  IfErrors transaction_prepare_failed
+  ${If} $OriginalInstall == "1"
+    ; Сохраняем посторонние файлы и вложенные каталоги. Старую резервную копию
+    ; не удаляем: рекурсивное удаление пользовательского каталога не требуется.
+    ClearErrors
+    CopyFiles /SILENT "$InstallBackup\*.*" "$INSTDIR"
+    IfErrors transaction_prepare_failed
+  ${EndIf}
+  Return
+  transaction_prepare_failed:
+    Call RollbackInstallTransaction
+    SetErrorLevel 3
+    Abort "Не удалось подготовить новую установку. Предыдущая версия сохранена."
+FunctionEnd
+
+Function RollbackInstallTransaction
+  ${If} $TransactionPrepared != "1"
+    Return
+  ${EndIf}
+  ${If} $TransactionCommitted == "1"
+    Return
+  ${EndIf}
+  SetOutPath "$TEMP"
+  ; Частичную новую папку изолируем переименованием, без удаления её содержимого.
+  IfFileExists "$INSTDIR\." 0 restore_original_install
+    ClearErrors
+    Rename "$INSTDIR" "$FailedInstall"
+    ${If} ${Errors}
+      IfSilent +2
+        MessageBox MB_ICONSTOP "Не удалось убрать незавершённую установку. Предыдущая версия сохранена в $InstallBackup. Закройте программы, использующие файлы ClipShot, и повторите установку."
+      SetErrorLevel 3
+      Return
+    ${EndIf}
+  restore_original_install:
+  ${If} $OriginalInstall == "1"
+    ClearErrors
+    Rename "$InstallBackup" "$INSTDIR"
+    ${If} ${Errors}
+      IfSilent +2
+        MessageBox MB_ICONSTOP "Предыдущая версия сохранена в $InstallBackup, но не удалось вернуть её каталог. Повторите установку после закрытия программ, использующих ClipShot."
+      SetErrorLevel 3
+      Return
+    ${EndIf}
+  ${EndIf}
+  StrCpy $TransactionPrepared "0"
+FunctionEnd
+
+Function .onInstFailed
+  ${If} $TransactionPrepared == "1"
+    Call RollbackInstallTransaction
+    SetErrorLevel 3
+  ${EndIf}
+FunctionEnd
+
 Function CloseClipShot
   StrCpy $2 "ClipNest.Quit.v1"
   StrCpy $3 "Local\ClipNest.Local.v1"
@@ -140,6 +234,7 @@ Function CloseClipShot
   ${EndIf}
   StrCpy $4 0
   ${If} $AutomaticInstall == "1"
+  ${OrIf} $StartupInstall == "1"
     StrCpy $2 "ClipNest.UpdateQuit.v1"
     ${If} $TestRoot != ""
       StrCpy $2 "ClipNest.Test.UpdateQuit.v1"
@@ -148,7 +243,11 @@ Function CloseClipShot
     IntOp $4 $4 + 5000
   ${EndIf}
   System::Call 'user32::RegisterWindowMessageW(w r2) i.r0'
-  System::Call 'user32::PostMessageW(p 0xffff, i r0, p r4, p 0)'
+  StrCpy $5 0
+  ${If} $StartupInstall == "1"
+    StrCpy $5 1
+  ${EndIf}
+  System::Call 'user32::PostMessageW(p 0xffff, i r0, p r4, p r5)'
   StrCpy $1 0
   wait_for_exit:
   Sleep 100
@@ -173,6 +272,7 @@ FunctionEnd
 Section "Приложение ClipShot" SecMain
   SectionIn RO
   Call CloseClipShot
+  Call PrepareInstallTransaction
   SetOutPath "$INSTDIR"
   SetOverwrite on
   ; The previous executable name is retired only after its process has exited.
@@ -181,7 +281,20 @@ Section "Приложение ClipShot" SecMain
   Delete "$INSTDIR\ClipNest.deps.json"
   Delete "$INSTDIR\ClipNest.runtimeconfig.json"
   Delete "$INSTDIR\ClipNest.pri"
-  File /r "..\ClipShot-app\*.*"
+  ClearErrors
+  File /r "${PUBLICATION_DIR}\*.*"
+  IfErrors integrity_failed
+  nsExec::ExecToStack '"$INSTDIR\Updater\ClipShot.Updater.exe" --verify-install "$INSTDIR"'
+  Pop $0
+  Pop $1
+  StrCmp $0 "0" integrity_ok
+  integrity_failed:
+    ; NSIS сначала возвращает целый прежний каталог, затем сообщает об отказе.
+    SetOutPath "$TEMP"
+    Call RollbackInstallTransaction
+    SetErrorLevel 3
+    Abort "Файлы программы не прошли проверку. Установка не завершена."
+  integrity_ok:
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   ${If} $TestRoot != ""
     FileOpen $0 "$INSTDIR\test-install-root.txt" w
@@ -203,6 +316,7 @@ Section "Приложение ClipShot" SecMain
     WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "ClipNest" '"$INSTDIR\ClipShot.exe" --background'
   ${EndIf}
   ${EndIf}
+  StrCpy $TransactionCommitted "1"
 SectionEnd
 
 Section "Ярлык на рабочем столе" SecDesktop

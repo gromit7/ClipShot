@@ -18,7 +18,7 @@ public sealed partial class MainWindow
         compactGroupCount=count;
         if(store.Get("panelautofit","1")!="1")return;
         double scale=Math.Max(1,Native.GetDpiForWindow(hwnd)/96d);
-        int height=(int)(Math.Max(100,count*41+40)*scale);
+        int height=(int)(Math.Max(100,count*41+64)*scale);
         compactResizing=true;
         try{AppWindow.Resize(new SizeInt32(Math.Max(AppWindow.Size.Width,(int)(220*scale)),height));}
         finally{compactResizing=false;}

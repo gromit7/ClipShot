@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
@@ -117,7 +117,7 @@ public sealed partial class MainWindow : Window
         if(msg==0x0112&&((long)w&0xFFF0)==0xF020){DispatcherQueue.TryEnqueue(Hide);return 0;}
         if(msg==App.ShowMessage){DispatcherQueue.TryEnqueue(ShowNearCursor);return 0;}
         if(msg==App.QuitMessage){DispatcherQueue.TryEnqueue(Quit);return 0;}
-        if(msg==App.UpdateQuitMessage){DispatcherQueue.TryEnqueue(()=>{if(UpdateIdlePolicy.QuitRequestValid(unchecked((uint)Environment.TickCount),(uint)w)&&CanAutoInstall())Quit();});return 0;}
+        if(msg==App.UpdateQuitMessage){DispatcherQueue.TryEnqueue(()=>{if(UpdateIdlePolicy.QuitRequestValid(unchecked((uint)Environment.TickCount),(uint)w)&&((long)l==1?CanStartupInstall:CanAutoInstall()))Quit();});return 0;}
         if(msg==taskbarCreated&&(!isolated||shellTest)){DispatcherQueue.TryEnqueue(()=>{trayReady=false;CreateTray();});return 0;}
         if(msg==App.MicrophoneMessage){DispatcherQueue.TryEnqueue(()=>RefreshMicrophone(true));return 0;}
         if(msg==0x031D && !isolated) { DispatcherQueue.TryEnqueue(()=>Capture()); }
@@ -148,7 +148,7 @@ public sealed partial class MainWindow : Window
     {
         RememberPasteTarget();
         if(editor is not null){editor.AppWindow.Show();editor.Activate();return;}
-        if(takingScreenshot||exiting)return;
+        if(takingScreenshot||exiting||startupUpdatePending)return;
         CancelPanelFade();Prune();Render();Native.GetCursorPos(out var p);
         var area=DisplayArea.GetFromPoint(new PointInt32(p.X,p.Y),DisplayAreaFallback.Nearest).WorkArea;
         int x=Math.Clamp(p.X+12,area.X,Math.Max(area.X,area.X+area.Width-AppWindow.Size.Width));
@@ -433,11 +433,10 @@ public sealed partial class MainWindow : Window
         if(dialogOpen||exiting)return;
         preview.IsOpen=false;
         var panel=new StackPanel{Spacing=12,MinWidth=320};
-        var automaticUpdates=new CheckBox{Content=T("Проверять обновления автоматически"),IsChecked=store.Get("updatecheck","1")=="1"};panel.Children.Add(automaticUpdates);
-        var updateMode=new ComboBox{Header=T("Установка обновлений"),HorizontalAlignment=HorizontalAlignment.Stretch};updateMode.Items.Add(T("Автоматически, когда ПК не используется"));updateMode.Items.Add(T("Только по нажатию"));updateMode.SelectedIndex=store.Get("updateinstall","auto")=="manual"?1:0;panel.Children.Add(updateMode);
-        var checkUpdates=new Button{Content=T("Проверить обновление")};panel.Children.Add(checkUpdates);
+        var checkUpdates=new Button{Content=T(preparedInstaller is null?"Проверить обновление":"Обновить сейчас")};panel.Children.Add(checkUpdates);
         checkUpdates.Click+=async(_,_)=>
         {
+            if(preparedInstaller is not null){ManualUpdateClick(this,new());return;}
             checkUpdates.IsEnabled=false;
             try{await CheckUpdatesFromTray();}
             finally{if(!exiting)checkUpdates.IsEnabled=true;}
@@ -486,8 +485,6 @@ public sealed partial class MainWindow : Window
         if(exiting||result!=ContentDialogResult.Primary)return;
         store.Set("shiftprint",shiftPrint.IsChecked==true?"1":"0");if(!isolated)RegisterScreenshotAlias();
         store.Set("sectionlayout",sectionLayout.SelectedIndex==1?"inline":"side");
-        store.Set("updatecheck",automaticUpdates.IsChecked==true?"1":"0");
-        store.Set("updateinstall",updateMode.SelectedIndex==1?"manual":"auto");ShowUpdateOffer();
         store.Set("days",days.SelectedIndex switch{0=>"30",2=>"0",_=>"90"});store.Set("theme",AppThemes.All[Math.Max(0,theme.SelectedIndex)].Id);
         try{if(!isolated)SetStartup(startup.IsChecked==true);store.Set("startup",startup.IsChecked==true?"1":"0");}catch{Status.Text=T("Не удалось изменить автозапуск.");}
         store.Set("autopaste",autopaste.SelectedIndex==1?"1":"0");store.Set("language",language.SelectedIndex==1?"en":"ru");ApplyLanguage();saveMicrophoneSettings();if(wantsClear)store.Clear();ApplyTheme();Prune();Render();

@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 
 namespace ClipShot;
@@ -12,7 +12,7 @@ public sealed partial class MainWindow
         get
         {
             string text=microphoneStarted?$"ClipShot · {MicrophoneText(microphoneResult.State)} · {ShortcutTip["ClipShot · ".Length..]}":ShortcutTip;
-            return text.Length>127?text[..126]+"…":text;
+            text=text.Replace("ClipShot ·",$"ClipShot {typeof(App).Assembly.GetName().Version?.ToString(3)} ·");return text.Length>127?text[..126]+"…":text;
         }
     }
     private void ApplyLanguage()
@@ -27,7 +27,7 @@ public sealed partial class MainWindow
         AutomationProperties.SetName(SettingsButton,T("Настройки"));ToolTipService.SetToolTip(SettingsButton,T("Настройки"));
         AutomationProperties.SetName(HelpButton,T("Справка"));ToolTipService.SetToolTip(HelpButton,T("Справка"));
         Status.Text=T(UiText.Russian(Status.Text));
-        ConfigureWindowContextMenu();
+        ConfigureWindowContextMenu();ShowUpdateOffer();
         if(trayReady){tray.Tip=TrayTip;Native.Shell_NotifyIcon(1,ref tray);}
     }
 }

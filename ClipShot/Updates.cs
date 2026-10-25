@@ -56,8 +56,10 @@ internal sealed class GitHubUpdates : IDisposable
 {
     private readonly HttpClient http;
     private readonly HttpClient feedHttp;
-    internal GitHubUpdates(HttpMessageHandler? handler=null)
+    private readonly Uri[] mirrorRoots;
+    internal GitHubUpdates(HttpMessageHandler? handler=null,IEnumerable<Uri>? mirrors=null)
     {
+        mirrorRoots=(mirrors??UpdateSources.MirrorRoots).ToArray();
         http=handler is null?new HttpClient():new HttpClient(handler);
         http.Timeout=TimeSpan.FromMinutes(5);http.DefaultRequestHeaders.UserAgent.ParseAdd("ClipShot/1.0");
         // Для ленты запрещены редиректы: одна проверка — ровно один GET без API/fallback.
@@ -81,25 +83,61 @@ internal sealed class GitHubUpdates : IDisposable
         while((read=await input.ReadAsync(buffer,token))>0){if(bytes.Length+read>UpdateFeed.MaximumBytes)throw new InvalidDataException("Update feed is too large");bytes.Write(buffer,0,read);}
         return System.Text.Encoding.UTF8.GetString(bytes.ToArray());
     }
-    internal async Task DownloadAsync(AppUpdate update,string path,IProgress<int> progress,CancellationToken token)
+    internal TimeSpan DownloadStallTimeout {get;set;}=TimeSpan.FromSeconds(30);
+    internal TimeSpan DownloadRetryDelay {get;set;}=TimeSpan.FromSeconds(2);
+    internal async Task DownloadAsync(AppUpdate update,string path,IProgress<int> progress,CancellationToken token,Action<int>? retrying=null)
     {
         string partial=path+".partial";
+        var sources=await UpdateSources.RankAsync(http,update,mirrorRoots,token);
         try
         {
-            using var response=await http.GetAsync(update.Download,HttpCompletionOption.ResponseHeadersRead,token);response.EnsureSuccessStatusCode();
-            if(response.Content.Headers.ContentLength is long size&&size!=update.Bytes)throw new InvalidDataException("Download size mismatch");
-            await using(var input=await response.Content.ReadAsStreamAsync(token))
-            await using(var output=new FileStream(partial,FileMode.Create,FileAccess.Write,FileShare.None,81920,true))
+            for(int attempt=0;;attempt++)
             {
-                var buffer=new byte[81920];long total=0;int read;int previous=-1;
-                while((read=await input.ReadAsync(buffer,token))>0)
+                try
                 {
-                    total+=read;if(total>update.Bytes)throw new InvalidDataException("Download exceeds expected size");await output.WriteAsync(buffer.AsMemory(0,read),token);
-                    int percent=(int)(total*100/update.Bytes);if(percent!=previous){previous=percent;progress.Report(percent);}
+                    long offset=File.Exists(partial)?new FileInfo(partial).Length:0;
+                    if(offset==update.Bytes&&UpdateProtocol.Verify(partial,update)){File.Move(partial,path,true);return;}
+                    using var request=new HttpRequestMessage(HttpMethod.Get,sources[attempt%sources.Count]);
+                    if(offset>0)request.Headers.Range=new System.Net.Http.Headers.RangeHeaderValue(offset,null);
+                    using var headerTimeout=CancellationTokenSource.CreateLinkedTokenSource(token);headerTimeout.CancelAfter(DownloadStallTimeout);
+                    using var response=await http.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,headerTimeout.Token);
+                    headerTimeout.CancelAfter(Timeout.InfiniteTimeSpan);response.EnsureSuccessStatusCode();
+                    if(response.StatusCode==System.Net.HttpStatusCode.PartialContent)
+                    {
+                        var range=response.Content.Headers.ContentRange;
+                        if(range?.From!=offset||range.Length!=update.Bytes||range.To!=update.Bytes-1)throw new InvalidDataException("Invalid download range");
+                    }
+                    else if(response.StatusCode==System.Net.HttpStatusCode.OK)offset=0;
+                    else throw new InvalidDataException("Unexpected download response");
+                    if(response.Content.Headers.ContentLength is long size&&size!=update.Bytes-offset)throw new InvalidDataException("Download size mismatch");
+                    await using(var input=await response.Content.ReadAsStreamAsync(token))
+                    await using(var output=new FileStream(partial,offset>0?FileMode.Append:FileMode.Create,FileAccess.Write,FileShare.None,81920,true))
+                    {
+                        var buffer=new byte[81920];long total=offset;int previous=-1;
+                        while(true)
+                        {
+                            // Таймаут измеряет отсутствие новых байтов, а не длительность всей загрузки.
+                            using var stall=CancellationTokenSource.CreateLinkedTokenSource(token);stall.CancelAfter(DownloadStallTimeout);
+                            int read=await input.ReadAsync(buffer,stall.Token);if(read==0)break;
+                            total+=read;if(total>update.Bytes)throw new InvalidDataException("Download exceeds expected size");
+                            await output.WriteAsync(buffer.AsMemory(0,read),token);
+                            int percent=(int)(total*100/update.Bytes);if(percent!=previous){previous=percent;progress.Report(percent);}
+                        }
+                        if(total!=update.Bytes)throw new IOException("Incomplete update");
+                    }
+                    if(!UpdateProtocol.Verify(partial,update))throw new InvalidDataException("Update checksum mismatch");
+                    File.Move(partial,path,true);return;
                 }
-                if(total!=update.Bytes)throw new InvalidDataException("Incomplete update");
+                catch(Exception error) when(attempt<2&&!token.IsCancellationRequested&&
+                    (error is not InvalidDataException||sources.Count>1)&&
+                    (error is IOException or HttpRequestException or OperationCanceledException or InvalidDataException))
+                {
+                    // InvalidDataException не наследует IOException: неверный SHA/Range зеркала
+                    // тоже должен переключать источник, начиная файл заново без плохого префикса.
+                    if(error is InvalidDataException&&File.Exists(partial))File.Delete(partial);
+                    retrying?.Invoke(attempt+1);await Task.Delay(DownloadRetryDelay,token);
+                }
             }
-            if(!UpdateProtocol.Verify(partial,update))throw new InvalidDataException("Update checksum mismatch");File.Move(partial,path,true);
         }
         finally{if(File.Exists(partial))File.Delete(partial);}
     }

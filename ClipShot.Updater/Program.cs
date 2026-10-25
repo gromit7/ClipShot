@@ -10,17 +10,19 @@ using ClipShot;
 internal static class Program
 {
     private static string? testRoot,app,backup,failedVersion;
-    private static bool validated,installerRunning,snapshotCompleted,automatic;
+    private static bool validated,installerRunning,snapshotCompleted,automatic,startup;
     private static string UpdatesRoot=>testRoot is null?Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ClipNest","Updates"):Path.Combine(testRoot,"Updates");
     [STAThread]private static async Task<int> Main(string[] args)
     {
         try
         {
             if(args.Length==1&&args[0]=="--self-test")return 0;
+            if(args.Length==2&&args[0]=="--verify-install")return InstallationIntegrity.Verify(args[1])?0:3;
             if(args.Length is <3 or >5)return 2;
             var options=args.Skip(3).ToArray();
-            if(options.Distinct().Count()!=options.Length||options.Any(a=>a!="--automatic"&&!a.StartsWith("--test-root=")))return 2;
+            if(options.Distinct().Count()!=options.Length||options.Any(a=>a!="--automatic"&&a!="--startup"&&!a.StartsWith("--test-root=")))return 2;
             automatic=options.Contains("--automatic");
+            startup=options.Contains("--startup");if(automatic&&startup)return 2;
             string? rootOption=options.SingleOrDefault(a=>a.StartsWith("--test-root="));
             if(rootOption is not null)
             {
@@ -37,7 +39,7 @@ internal static class Program
             using var installLease=AcquireInstallerLease();if(installLease is null)return 4;
             if(args[0]=="--rollback")
             {
-                if(automatic)return 2;
+                if(automatic||startup)return 2;
                 backup=Path.GetFullPath(args[1]);if(!Inside(backup,UpdatesRoot)||!File.Exists(Path.Combine(backup,"FileInventory.json")))return 2;
                 validated=true;string skipped=FileVersionInfo.GetVersionInfo(app).ProductVersion?.Split('+')[0]??"";
                 StopApp();Restore();await Restart("--background --install-result=rollback --skip-update="+skipped);return 0;
@@ -52,7 +54,7 @@ internal static class Program
             bool downgrade=Version.TryParse(former,out var oldVersion)&&Version.Parse(failedVersion)<oldVersion;
             if(automatic&&!IdleEnough())return 4;
             // Главное приложение само ещё раз проверит окно, редактор и ввод перед завершением.
-            if(!StopApp(automatic))return 4;
+            if(!StopApp(automatic||startup))return 4;
             validated=true;Snapshot();snapshotCompleted=true;
             if(automatic&&!IdleEnough()){await Restart("--background");return 4;}
             // Держим общую блокировку до завершения транзакции. Дочерний NSIS допускается
@@ -61,6 +63,7 @@ internal static class Program
             using var handoff=new Mutex(false,handoffName);
             var setup=new ProcessStartInfo(installer){UseShellExecute=false,CreateNoWindow=true};setup.ArgumentList.Add("/S");if(testRoot is not null)setup.ArgumentList.Add("/TESTROOT="+testRoot);
             setup.ArgumentList.Add("/UPDATERTOKEN="+handoffName);if(automatic)setup.ArgumentList.Add("/AUTOMATIC");
+            if(startup)setup.ArgumentList.Add("/STARTUP");
             using var process=Process.Start(setup)??throw new IOException("Cannot start installer");
             installerRunning=true;using var timeout=new CancellationTokenSource(TimeSpan.FromMinutes(10));await process.WaitForExitAsync(timeout.Token);installerRunning=false;
             if(process.ExitCode==4){await Restart("--background");return 4;}
@@ -74,7 +77,10 @@ internal static class Program
             // В тестовом режиме Restart всегда использует --upgrade-self-test. Ни один fallback
             // не должен случайно запустить приложение с личной базой на рабочем ПК.
             if(validated&&!installerRunning&&app is not null&&!InstallerBusy())
-                try{if(!StopApp(automatic))return 1;if(snapshotCompleted)Restore();}catch{}
+                // Проверка простоя ограничивает начало установки. Возврат целого комплекта
+                // после ошибки нельзя отменять из-за движения мыши. При startup сохраняется
+                // защищённая команда: вновь открытый пользователем редактор не закрываем.
+                try{if(!StopApp(startup))return 1;if(snapshotCompleted)Restore();}catch{}
                 finally{try{await Restart("--background --update-failed --skip-update="+failedVersion);}catch{}}
             return 1;
         }
@@ -119,14 +125,14 @@ internal static class Program
     private static Mutex? AcquireInstallerLease(){var mutex=new Mutex(false,testRoot is null?"Local\\ClipShot.Setup.v1":"Local\\ClipShot.Test.Setup.v1",out bool created);if(created)return mutex;mutex.Dispose();return null;}
     private static bool IdleEnough()=>UserInactivity.Read() is {} idle&&idle>=UpdateIdlePolicy.MinimumIdle;
     private static bool InstallerBusy(){if(!Mutex.TryOpenExisting(testRoot is null?"Local\\ClipShot.Setup.v1":"Local\\ClipShot.Test.Setup.v1",out var mutex))return false;mutex.Dispose();return true;}
-    private static bool StopApp(bool automatic=false)
+    private static bool StopApp(bool guarded=false)
     {
-        if(automatic&&!IdleEnough())return false;
-        uint message=RegisterWindowMessage(TestEnvironmentName(automatic?"UpdateQuit":"Quit"));
-        nint deadline=automatic?(nint)unchecked((uint)Environment.TickCount+5000):0;
-        PostMessage((nint)0xffff,message,deadline,0);
+        if(guarded&&automatic&&!IdleEnough())return false;
+        uint message=RegisterWindowMessage(TestEnvironmentName(guarded?"UpdateQuit":"Quit"));
+        nint deadline=guarded?(nint)unchecked((uint)Environment.TickCount+5000):0;
+        PostMessage((nint)0xffff,message,deadline,guarded&&startup?1:0);
         if(!Mutex.TryOpenExisting(testRoot is null?"Local\\ClipNest.Local.v1":"Local\\ClipNest.Test.v1",out var mutex))return true;
-        using(mutex){bool acquired=false;try{acquired=mutex.WaitOne(10000);}catch(AbandonedMutexException){acquired=true;}finally{if(acquired)mutex.ReleaseMutex();}if(!acquired&&!automatic)throw new IOException("App is still busy");return acquired;}
+        using(mutex){bool acquired=false;try{acquired=mutex.WaitOne(10000);}catch(AbandonedMutexException){acquired=true;}finally{if(acquired)mutex.ReleaseMutex();}if(!acquired&&!guarded)throw new IOException("App is still busy");return acquired;}
     }
     private static string TestEnvironmentName(string action)=>$"ClipNest.{(testRoot is null?"":"Test.")}{action}.v1";
     [DllImport("user32.dll",CharSet=CharSet.Unicode)]private static extern uint RegisterWindowMessage(string name);

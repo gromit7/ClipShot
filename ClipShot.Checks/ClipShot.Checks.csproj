@@ -1,8 +1,8 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0-windows</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><IsTestProject>true</IsTestProject><IsPackable>false</IsPackable></PropertyGroup>
  <ItemGroup><Compile Include="../ClipShot/Store.cs" Link="Store.cs"/><Compile Include="../ClipShot/Win32Hotkey.cs" Link="Win32Hotkey.cs"/><Compile Include="../ClipShot/ScreenFrame.cs" Link="ScreenFrame.cs"/><PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.13"/></ItemGroup>
  <ItemGroup>
-  <Compile Include="../ClipShot/UpdateIdlePolicy.cs" Link="UpdateIdlePolicy.cs"/>
+  <Compile Include="../ClipShot/UpdateSources.cs" Link="UpdateSources.cs"/><Compile Include="../ClipShot/PendingUpdate.cs" Link="PendingUpdate.cs"/><Compile Include="../ClipShot/InstallationIntegrity.cs" Link="InstallationIntegrity.cs"/><Compile Include="../ClipShot/UpdateIdlePolicy.cs" Link="UpdateIdlePolicy.cs"/>
   <Compile Include="../ClipShot/UpdateSchedule.cs" Link="UpdateSchedule.cs"/><Compile Include="../ClipShot/UpdateFeed.cs" Link="UpdateFeed.cs"/>
   <Compile Include="../ClipShot/HistoryView.cs" Link="HistoryView.cs"/><Compile Include="../ClipShot/AppSettings.cs" Link="AppSettings.cs"/><Compile Include="../ClipShot/TestEnvironment.cs" Link="TestEnvironment.cs"/>
   <Compile Include="../ClipShot/AppTheme.cs" Link="AppTheme.cs"/>

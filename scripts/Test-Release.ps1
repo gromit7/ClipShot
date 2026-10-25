@@ -69,6 +69,60 @@ try{
             Copy-Item -LiteralPath (Join-Path $languageRoot 'installer-language.txt') -Destination (Join-Path $reports 'installer-language.txt') -Force
         }
         if(-not $SkipDesktop){
+            Step 'Transactional install, locked DLL and verification rollback' {
+                $transactionRoot=Join-Path ([IO.Path]::GetTempPath()) ('ClipShot.Tests/'+[guid]::NewGuid().ToString('N'))
+                New-Item -ItemType Directory -Path $transactionRoot -Force | Out-Null
+                $transactionDir=Join-Path $transactionRoot 'App'
+                $transactionArgs='/S /TESTROOT="'+$transactionRoot+'"'
+                Process-Checked $setup $transactionArgs 120000
+                $unrelatedDir=Join-Path $transactionDir 'not-shipped/nested'
+                New-Item -ItemType Directory -Path $unrelatedDir -Force | Out-Null
+                $unrelatedPath=Join-Path $unrelatedDir 'keep.txt'
+                Set-Content -LiteralPath $unrelatedPath -Value 'synthetic unrelated nested file'
+                $dll=Join-Path $transactionDir 'ClipShot.dll'
+                [IO.File]::AppendAllText($dll,'synthetic previous revision')
+                $beforeTransaction=@{}
+                Get-ChildItem -LiteralPath $transactionDir -File -Recurse | ForEach-Object {$beforeTransaction[[IO.Path]::GetRelativePath($transactionDir,$_.FullName)]=(Get-FileHash -LiteralPath $_.FullName).Hash}
+                # Реальная блокировка старой DLL: запрет записи и удаления, а не mock.
+                $locked=[IO.File]::Open($dll,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::Read)
+                try{
+                    $attempt=Start-Process -FilePath $setup -ArgumentList $transactionArgs -PassThru -WindowStyle Hidden
+                    if(-not $attempt.WaitForExit(120000)){throw 'Locked-DLL installation timed out'}
+                    if($attempt.ExitCode -notin 0,3){throw ('Unexpected locked-DLL setup result: '+$attempt.ExitCode)}
+                    if($attempt.ExitCode -eq 3){
+                        foreach($entry in $beforeTransaction.GetEnumerator()){
+                            if((Get-FileHash -LiteralPath (Join-Path $transactionDir $entry.Key)).Hash -ne $entry.Value){throw ('Failed setup changed original file: '+$entry.Key)}
+                        }
+                    }else{
+                        $expectedHashes=Get-Content -LiteralPath (Join-Path $publication 'FileHashes.json') -Raw | ConvertFrom-Json -AsHashtable
+                        foreach($entry in $expectedHashes.GetEnumerator()){
+                            if((Get-FileHash -LiteralPath (Join-Path $transactionDir $entry.Key)).Hash -ne $entry.Value){throw ('Locked DLL produced mixed installation: '+$entry.Key)}
+                        }
+                    }
+                    $lockedResult=$attempt.ExitCode
+                }finally{$locked.Dispose()}
+                if((Get-Content -LiteralPath $unrelatedPath -Raw) -notmatch 'synthetic unrelated nested file'){throw 'Update lost an unrelated nested file'}
+                Process-Checked $setup $transactionArgs 120000
+                # Пакет с намеренно неверным хешем должен откатить уже скопированные файлы.
+                $badPublication=Join-Path $transactionRoot 'BadPayload'
+                New-Item -ItemType Directory -Path $badPublication -Force | Out-Null
+                Copy-Item -Path (Join-Path $publication '*') -Destination $badPublication -Recurse -Force
+                $badHashes=Get-Content -LiteralPath (Join-Path $badPublication 'FileHashes.json') -Raw | ConvertFrom-Json -AsHashtable
+                $badHashes['ClipShot.dll']='0'*64
+                $badHashes | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $badPublication 'FileHashes.json') -Encoding utf8
+                & $MakeNsis /V2 /WX /INPUTCHARSET UTF8 '/DVERSION=99.0.0' ("/DPUBLICATION_DIR="+$badPublication) (Join-Path $repo 'ClipShot/installer.nsi')
+                if($LASTEXITCODE -ne 0){throw 'Cannot compile invalid-manifest fixture'}
+                $badSetup=Join-Path $repo 'ClipShot-Setup-99.0.0.exe'
+                $beforeTransaction=@{}
+                Get-ChildItem -LiteralPath $transactionDir -File -Recurse | ForEach-Object {$beforeTransaction[[IO.Path]::GetRelativePath($transactionDir,$_.FullName)]=(Get-FileHash -LiteralPath $_.FullName).Hash}
+                $attempt=Start-Process -FilePath $badSetup -ArgumentList $transactionArgs -PassThru -WindowStyle Hidden
+                if(-not $attempt.WaitForExit(120000) -or $attempt.ExitCode -ne 3){throw 'Invalid manifest did not fail with the integrity error'}
+                foreach($entry in $beforeTransaction.GetEnumerator()){
+                    if((Get-FileHash -LiteralPath (Join-Path $transactionDir $entry.Key)).Hash -ne $entry.Value){throw ('Integrity failure changed original file: '+$entry.Key)}
+                }
+                Process-Checked (Join-Path $transactionDir 'Updater/ClipShot.Updater.exe') ('--verify-install "'+$transactionDir+'"')
+                Set-Content -LiteralPath (Join-Path $reports 'installation-integrity-checks.txt') -Value ("PASS locked DLL leaves one complete version (exit $lockedResult), unrelated nested file preserved, invalid manifest restores all original files")
+            }
             Step 'Isolated install, running-app upgrade and uninstall' {
                 $sandbox=Join-Path ([IO.Path]::GetTempPath()) ('ClipShot.Tests/'+[guid]::NewGuid().ToString('N'))
                 New-Item -ItemType Directory -Path $sandbox -Force | Out-Null
@@ -93,6 +147,7 @@ try{
                 Process-Checked $installedApp '--upgrade-self-test'
                 if((Get-Content -LiteralPath $ready -Raw) -notmatch '^PASS preserved'){throw 'User data did not survive upgrade'}
                 if((Get-FileHash -LiteralPath $installedApp).Hash -ne (Get-FileHash -LiteralPath $app).Hash){throw 'Installed binary differs from publication'}
+                $manifest=Get-Content -LiteralPath (Join-Path $publication 'FileHashes.json') -Raw | ConvertFrom-Json -AsHashtable;foreach($entry in $manifest.GetEnumerator()){if((Get-FileHash -LiteralPath (Join-Path $installDir $entry.Key)).Hash -ne $entry.Value){throw ('Installed file differs: '+$entry.Key)}}
                 Copy-Item -LiteralPath $ready -Destination (Join-Path $reports 'upgrade-checks.txt') -Force
                 # Exercise the actual external updater in an explicit sandbox. Its fallback may
                 # never launch a normal app or send a production shutdown message in this mode.
