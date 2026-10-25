@@ -31,7 +31,9 @@ $setup=Join-Path $repo "ClipShot-Setup-$version.exe"
 $assets=@($setup,(Join-Path $repo 'SHA256SUMS.txt'),(Join-Path $repo "ClipShot-$version-buildinfo.json"),(Join-Path $repo "ClipShot-$version-checks.json"))
 # Черновик не попадёт к обновлятору. Полный SHA связывает выпуск с исходниками.
 GitHub -Arguments (@('release','create',$tag,'--repo',$repository,'--target',$commit,'--title',"ClipShot $version",'--notes-file',$NotesFile,'--draft')+$assets) | Write-Output
-$release=GitHub -Arguments @('api',"repos/$repository/releases/tags/$tag") | ConvertFrom-Json
+# У черновика ещё нет публичного тега: проверяем по ID, а не через releases/tags.
+$releaseId=(GitHub -Arguments @('release','view',$tag,'--repo',$repository,'--json','databaseId','--jq','.databaseId')).Trim()
+$release=GitHub -Arguments @('api',"repos/$repository/releases/$releaseId") | ConvertFrom-Json
 $asset=$release.assets | Where-Object name -eq "ClipShot-Setup-$version.exe"
 $hash=(Get-FileHash -LiteralPath $setup).Hash.ToLowerInvariant()
 if(-not $asset -or $asset.state -ne 'uploaded' -or $asset.size -ne (Get-Item $setup).Length -or $asset.digest -ne "sha256:$hash"){throw 'GitHub не подтвердил размер и SHA-256. Черновик сохранён.'}
