@@ -1,0 +1,29 @@
+name: Build and tests
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build, test and publish
+        shell: pwsh
+        run: ./scripts/Build.ps1 -Test -Publish
+      - name: Validate publication
+        shell: pwsh
+        run: ./scripts/Test-Release.ps1 -SkipBuild -SkipDesktop
+      - name: Test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: TestResults/
+          retention-days: 14

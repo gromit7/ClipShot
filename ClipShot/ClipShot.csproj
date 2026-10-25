@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <Version>0.5.1</Version>
+    <Product>ClipShot</Product><Title>ClipShot</Title><Description>Буфер обмена и скриншоты</Description>
+    <ApplicationIcon>Assets/ClipShot.ico</ApplicationIcon>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PlatformTarget>x64</PlatformTarget>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Remove="Assets/Selection.cur" />
+    <Content Include="Assets/Selection.cur" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Update="Assets/ClipShot.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260921001" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.13" />
+  </ItemGroup>
+  <!-- Unpackaged WinUI resource index must accompany self-contained publications. -->
+  <Target Name="PublishWinUIResourceIndex" AfterTargets="Publish">
+    <Copy SourceFiles="$(TargetDir)$(AssemblyName).pri" DestinationFolder="$(PublishDir)" />
+  </Target>
+</Project>
