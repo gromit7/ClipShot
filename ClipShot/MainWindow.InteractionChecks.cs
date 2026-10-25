@@ -15,6 +15,9 @@ public sealed partial class MainWindow
             Check(ManualUpdateLink.Visibility==Visibility.Visible&&ManualUpdateLink.IsEnabled&&ManualUpdateLink.Content.ToString()=="Проверить обновление","quiet manual update action is always visible at bottom");
             preparedInstaller="synthetic-not-executed.exe";updateMetadataValid=true;ShowUpdateOffer();
             Check(updatePulseActive&&ManualUpdateLink.Content.ToString()=="Обновить сейчас","verified prepared update changes caption and starts gentle reminder");
+            preparedUpdate=new AppUpdate(new Version(9,8,7),new Uri("https://github.com/gromit7/ClipShot/releases/download/v9.8.7/ClipShot-Setup-9.8.7.exe"),1,new string('a',64));ShowUpdateOffer();
+            Check(updatePulseActive&&ManualUpdateLink.Content.ToString()!.Contains("9.8.7"),"prepared update displays the new version in its quiet action");preparedUpdate=null;
+            Check(NoUpdatesVersionDetail.Contains(typeof(App).Assembly.GetName().Version!.ToString(3)),"no-update notice identifies the currently running application version");
             updateLaunchRequested=true;ShowUpdateOffer();
             Check(!ManualUpdateLink.IsEnabled&&!updatePulseActive&&ManualUpdateLink.Content.ToString()=="Устанавливаем обновление…","pressing update gives visible feedback and prevents repeated clicks");
             updateLaunchRequested=false;preparedInstaller=null;updateMetadataValid=false;ShowUpdateOffer();
@@ -24,6 +27,7 @@ public sealed partial class MainWindow
             Check(Groups.Children.Count==1&&TemplateGroups.Children.Count==1&&sectionPopup.IsOpen&&visible.Count==5,"compact panel keeps dates above bottom templates and opens today beside it");
             Check(AppWindow.Size.Width<400&&AppWindow.Size.Height<300&&Search.PlaceholderText.Length==0,"default panel is compact and empty search has only a magnifier");
             await RunSectionHoverChecks(results);
+            await RunWindowDragChecks(results);
             var presenter=(Microsoft.UI.Windowing.OverlappedPresenter)AppWindow.Presenter;
             var pin=((Microsoft.UI.Xaml.Controls.MenuFlyout)Root.ContextFlyout).Items.OfType<Microsoft.UI.Xaml.Controls.ToggleMenuFlyoutItem>().Single(i=>Equals(i.Tag,"alwaysontop"));
             Check(!AlwaysOnTop&&!presenter.IsAlwaysOnTop&&!pin.IsChecked,"always-on-top is off by default in both saved preference and presenter");

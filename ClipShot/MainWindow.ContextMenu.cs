@@ -17,11 +17,16 @@ public sealed partial class MainWindow
     }
     private void DragEmptySpace(object sender,PointerRoutedEventArgs e)
     {
-        if(e.Handled||dialogOpen||takingScreenshot||!e.GetCurrentPoint(Root).Properties.IsLeftButtonPressed)return;
-        for(var node=e.OriginalSource as DependencyObject;node is not null&&node!=Root;node=VisualTreeHelper.GetParent(node))
-            if(node is ButtonBase or TextBox or ScrollBar or Slider||node is Border{Tag:Border})return;
-        e.Handled=true;Native.GetCursorPos(out var mouse);Native.ReleaseCapture();
-        nint coordinates=(nint)unchecked((int)(((uint)(ushort)mouse.Y<<16)|(ushort)mouse.X));
-        Native.SendMessage(hwnd,0x00A1,2,coordinates);
+        if(e.Handled||!IsWindowDragSource(e.OriginalSource as DependencyObject))return;
+        TryStartWindowPointerGesture(WindowPointerGesture.Move,e);
+    }
+    private bool IsWindowDragSource(DependencyObject? source)
+    {
+        for(var node=source;node is not null;node=VisualTreeHelper.GetParent(node))
+        {
+            if(ReferenceEquals(node,Root))return true;
+            if(ReferenceEquals(node,HeaderSurface)||node is ButtonBase or TextBox or ScrollBar or Slider||node is Border{Tag:Border})return false;
+        }
+        return false;
     }
 }

@@ -3,20 +3,23 @@ namespace ClipShot;
 
 public static class UpdateSchedule
 {
-    // Передаётся местное время. После пропуска берём только последний слот сегодняшнего дня,
-    // а не проигрываем очередь вчерашних проверок. Возвращённый слот сохраняется до HTTP-запроса.
-    public static string? GetDueSlot(DateTime localNow,string? lastCheckedSlot)
+    public static string DayKey(DateTime localNow)=>localNow.ToString("yyyyMMdd",CultureInfo.InvariantCulture);
+    // Запуск и ручная команда не ждут простоя. Фоновая проверка нужна,
+    // если сегодня ещё не было успешного запроса. Пропущенные дни не догоняем.
+    public static string? GetDueSlot(DateTime localNow,string? lastCheckedSlot,TimeSpan? idle)
     {
-        if(localNow.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday||localNow.Hour<9)return null;
-        int hour=localNow.Hour>=15?15:9;
-        string slot=localNow.ToString("yyyyMMdd",CultureInfo.InvariantCulture)+"-"+hour.ToString("00",CultureInfo.InvariantCulture);
-        // Память о последней попытке переживает перезапуск. Будущий слот также блокирует
-        // повторную проверку при переводе системных часов назад, включая смену дня.
-        if(IsSlot(lastCheckedSlot)&&string.CompareOrdinal(lastCheckedSlot,slot)>=0)return null;
+        if(idle is not {} elapsed||elapsed<UpdateIdlePolicy.MinimumIdle)return null;
+        string slot=DayKey(localNow);
+        string? previous=CheckedDay(lastCheckedSlot);
+        // Поддерживаем старые ключи09/15 и перевод часов назад без лишних запросов.
+        if(previous is not null&&string.CompareOrdinal(previous,slot)>=0)return null;
         return slot;
     }
 
-    private static bool IsSlot(string? value)=>value is not null&&
-        DateTime.TryParseExact(value,"yyyyMMdd-HH",CultureInfo.InvariantCulture,DateTimeStyles.None,out var date)&&
-        date.Hour is 9 or 15&&date.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday);
+    private static string? CheckedDay(string? value)
+    {
+        if(value is null)return null;
+        string day=value.Length==8?value:value.Length==11&&(value.EndsWith("-09",StringComparison.Ordinal)||value.EndsWith("-15",StringComparison.Ordinal))?value[..8]:"";
+        return DateTime.TryParseExact(day,"yyyyMMdd",CultureInfo.InvariantCulture,DateTimeStyles.None,out _)?day:null;
+    }
 }
