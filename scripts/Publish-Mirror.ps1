@@ -109,12 +109,13 @@ def main(version,mode):
 if __name__=='__main__':main(sys.argv[1],sys.argv[2])
 '@
 $mode=if($CheckOnly){'check'}else{'publish'}
-$command="python3 - '$Version' '$mode' <<'CLIPSHOT_MIRROR_PUBLISH'"+[Environment]::NewLine+$python+[Environment]::NewLine+'CLIPSHOT_MIRROR_PUBLISH'
+$command="python3 - '$Version' '$mode' <<'CLIPSHOT_MIRROR_PUBLISH'`n"+$python.Replace("`r`n","`n")+"`nCLIPSHOT_MIRROR_PUBLISH"
 $output=@(& $RemoteExecutorPath -Command $command)
 $executorCode=$LASTEXITCODE
 if($null -ne $executorCode -and $executorCode -ne 0){throw 'Mirror executor failed.'}
 $text=($output|ForEach-Object { [string]$_ }) -join [Environment]::NewLine
 $sshResults=[regex]::Matches($text,'(?m)^ssh_exit\s+([^\r\n]+)')
+if($sshResults.Count -eq 0){throw 'Remote SSH exit verification is missing.'}
 foreach($result in $sshResults){if($result.Groups[1].Value.Trim() -ne '0'){throw 'Remote mirror command failed.'}}
 $records=@([regex]::Matches($text,'(?m)^\{[^\r\n]*\}\s*$')|ForEach-Object {try{$_.Value|ConvertFrom-Json}catch{}})
 $record=$records|Where-Object { $_.verification -eq 'clipshot-mirror-v1' -and $_.version -eq $Version -and $_.mode -eq $mode }|Select-Object -Last 1
