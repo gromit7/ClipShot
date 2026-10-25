@@ -50,7 +50,7 @@ internal sealed partial class ScreenshotEditor : Window
         undo.Label=T("Отменить");undo.Width=76;undo.FontSize=12;undo.Icon=new SymbolIcon(Symbol.Undo);undo.Click+=(_,_)=>{if(busy)return;history.Undo();_=RefreshAsync();};bar.PrimaryCommands.Add(undo);
         redo.Label=T("Повторить");redo.Width=76;redo.FontSize=12;redo.Icon=new SymbolIcon(Symbol.Redo);redo.Click+=(_,_)=>{if(busy)return;history.Redo();_=RefreshAsync();};bar.PrimaryCommands.Add(redo);
         copy.Label=T("Копировать в буфер");copy.Width=150;copy.FontSize=12;copy.Icon=new SymbolIcon(Symbol.Copy);ToolTipService.SetToolTip(copy,T("Копировать в буфер · Enter"));copy.Click+=async(_,_)=>await CopyAsync();bar.PrimaryCommands.Add(copy);
-        var save=new AppBarButton{Label=T("Сохранить PNG"),Width=108,FontSize=12,Icon=new SymbolIcon(Symbol.Save)};ToolTipService.SetToolTip(save,T("Сохранить PNG · Ctrl+S"));save.Click+=async(_,_)=>await SaveAsync();bar.PrimaryCommands.Add(save);
+        var save=new AppBarButton{Label=T("Экспорт…"),Width=108,FontSize=12,Icon=new SymbolIcon(Symbol.Save)};ToolTipService.SetToolTip(save,T("Экспорт PNG или JPEG · Ctrl+S"));save.Click+=async(_,_)=>await SaveAsync();bar.PrimaryCommands.Add(save);
         var colors=new ComboBox{Width=116,Margin=new Thickness(8,0,8,0)};
         foreach(string name in new[]{"Красный","Синий","Чёрный","Белый"})colors.Items.Add(T(name));
         colors.SelectedIndex=0;
@@ -129,7 +129,7 @@ internal sealed partial class ScreenshotEditor : Window
         int current=++revision;var marks=history.Marks.ToArray();undo.IsEnabled=history.CanUndo;redo.IsEnabled=history.CanRedo;
         try{var frame=await Task.Run(()=>AnnotationRenderer.Render(source,marks));if(!closed&&current==revision)SetImage(frame);}catch{if(!closed)status.Text=T("Не удалось обновить разметку.");}
     }
-    private async Task<byte[]> ExportAsync(){var marks=history.Marks.ToArray();var frame=await Task.Run(()=>AnnotationRenderer.Render(source,marks));return await DesktopCapture.Png(frame,BitmapAlphaMode.Straight);}
+    private async Task<byte[]> ExportAsync(bool jpeg=false){var marks=history.Marks.ToArray();var frame=await Task.Run(()=>AnnotationRenderer.Render(source,marks));return jpeg?await DesktopCapture.Jpeg(frame):await DesktopCapture.Png(frame,BitmapAlphaMode.Straight);}
     private async Task CopyAsync()
     {
         if(busy||dialog||closed)return;busy=true;
@@ -141,8 +141,8 @@ internal sealed partial class ScreenshotEditor : Window
         if(busy||dialog||closed)return;busy=true;
         try
         {
-            var picker=new FileSavePicker{SuggestedFileName="ClipShot-"+DateTime.Now.ToString("yyyy-MM-dd-HHmmss"),DefaultFileExtension=".png"};picker.FileTypeChoices.Add("PNG",new List<string>{".png"});WinRT.Interop.InitializeWithWindow.Initialize(picker,WinRT.Interop.WindowNative.GetWindowHandle(this));
-            var file=await picker.PickSaveFileAsync();if(file is not null&&!closed){await FileIO.WriteBytesAsync(file,await ExportAsync());status.Text=T("Снимок сохранён.");}
+            var picker=new FileSavePicker{SuggestedFileName="ClipShot-"+DateTime.Now.ToString("yyyy-MM-dd-HHmmss"),DefaultFileExtension=".png"};picker.FileTypeChoices.Add("PNG",new List<string>{".png"});picker.FileTypeChoices.Add("JPEG",new List<string>{".jpg",".jpeg"});WinRT.Interop.InitializeWithWindow.Initialize(picker,WinRT.Interop.WindowNative.GetWindowHandle(this));
+            var file=await picker.PickSaveFileAsync();if(file is not null&&!closed){await FileIO.WriteBytesAsync(file,await ExportAsync(DesktopCapture.IsJpeg(file.Path)));status.Text=T("Снимок сохранён.");}
         }
         catch{if(!closed)status.Text=T("Не удалось сохранить снимок.");}finally{busy=false;}
     }

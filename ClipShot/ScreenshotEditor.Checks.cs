@@ -27,6 +27,12 @@ internal sealed partial class ScreenshotEditor
         var decoded=await decoder.GetPixelDataAsync(BitmapPixelFormat.Bgra8,BitmapAlphaMode.Straight,new BitmapTransform(),ExifOrientationMode.IgnoreExifOrientation,ColorManagementMode.DoNotColorManage);
         var expected=AnnotationRenderer.Render(source,history.Marks);
         Check(decoded.DetachPixelData().SequenceEqual(expected.Pixels),"exported PNG contains exact annotated pixels");
+        var jpeg=await ExportAsync(true);using var jpegStream=new InMemoryRandomAccessStream();using(var writer=new DataWriter(jpegStream.GetOutputStreamAt(0))){writer.WriteBytes(jpeg);await writer.StoreAsync();}jpegStream.Seek(0);
+        var jpegDecoder=await BitmapDecoder.CreateAsync(jpegStream);
+        Check(jpeg[0]==255&&jpeg[1]==216&&jpegDecoder.PixelWidth==source.Width&&jpegDecoder.PixelHeight==source.Height,"JPEG export uses a real JPEG encoder and preserves dimensions");
+        var whiteJpeg=await DesktopCapture.Jpeg(new ScreenFrame(0,0,8,8,new byte[8*8*4]));using var whiteStream=new InMemoryRandomAccessStream();using(var writer=new DataWriter(whiteStream.GetOutputStreamAt(0))){writer.WriteBytes(whiteJpeg);await writer.StoreAsync();}whiteStream.Seek(0);
+        var whiteDecoder=await BitmapDecoder.CreateAsync(whiteStream);var whitePixels=(await whiteDecoder.GetPixelDataAsync()).DetachPixelData();
+        Check(whitePixels[0]>=248&&whitePixels[1]>=248&&whitePixels[2]>=248,"JPEG export flattens transparent pixels onto white");
         Check(source.Pixels.SequenceEqual(original),"original screenshot is unchanged");
         await CopyAsync();Check(closed&&completion.Task.IsCompletedSuccessfully&&completion.Task.Result is not null,"copy action returns edited PNG and closes editor");
         return report;

@@ -5,7 +5,7 @@
 !include "WinVer.nsh"
 !include "FileFunc.nsh"
 !ifndef VERSION
-!define VERSION "0.7.1"
+!define VERSION "0.7.2"
 !endif
 Var TestRoot
 Var InstallResult

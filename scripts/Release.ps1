@@ -42,5 +42,6 @@ $latest=GitHub -Arguments @('api',"repos/$repository/releases/latest") | Convert
 if($latest.tag_name -ne $tag){throw 'Лента автообновления не указывает на новый выпуск.'}
 $published=$latest.assets | Where-Object name -eq "ClipShot-Setup-$version.exe"
 if($published.digest -ne "sha256:$hash"){throw 'Контрольная сумма в ленте не совпадает.'}
+& (Join-Path $PSScriptRoot 'Publish-UpdateFeed.ps1') -ExpectedVersion $version -Publish
 & (Join-Path $PSScriptRoot 'Publish-Installer.ps1') -Setup $setup
 Write-Output "Выпущен ClipShot ${version}: GitHub, автообновление и локальный установщик совпадают."

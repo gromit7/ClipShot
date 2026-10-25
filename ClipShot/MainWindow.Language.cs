@@ -19,12 +19,15 @@ public sealed partial class MainWindow
     {
         words=new UiText(store.Get("language","ru"));
         string version=typeof(App).Assembly.GetName().Version?.ToString(3)??"";
-        Title=$"ClipShot {version} — {T("буфер обмена и скриншоты")}";TitleText.Text="ClipShot";Search.PlaceholderText=T("Поиск по истории");
+        Title=$"ClipShot {version} — {T("буфер обмена и скриншоты")}";TitleText.Text="ClipShot";Search.PlaceholderText="";
+        ToolTipService.SetToolTip(Search,T("Поиск по истории"));
+        ToolTipService.SetToolTip(SearchGlyph,T("Переместить окно"));
         SelectHint.Text=T("Выбрать");CopyHint.Text=T("Копировать");CloseHint.Text=T("Закрыть");
         AutomationProperties.SetName(Search,T("Поиск по истории и шаблонам"));
         AutomationProperties.SetName(SettingsButton,T("Настройки"));ToolTipService.SetToolTip(SettingsButton,T("Настройки"));
         AutomationProperties.SetName(HelpButton,T("Справка"));ToolTipService.SetToolTip(HelpButton,T("Справка"));
         Status.Text=T(UiText.Russian(Status.Text));
+        ConfigureWindowContextMenu();
         if(trayReady){tray.Tip=TrayTip;Native.Shell_NotifyIcon(1,ref tray);}
     }
 }

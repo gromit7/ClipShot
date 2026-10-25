@@ -51,4 +51,23 @@ internal static class DesktopCapture
         encoder.SetPixelData(BitmapPixelFormat.Bgra8,alpha,(uint)frame.Width,(uint)frame.Height,96,96,frame.Pixels);await encoder.FlushAsync();stream.Seek(0);
         byte[] png=new byte[(int)stream.Size];using var reader=new DataReader(stream);await reader.LoadAsync((uint)png.Length);reader.ReadBytes(png);return png;
     }
+    public static async Task<byte[]> Jpeg(ScreenFrame frame)
+    {
+        // JPEG не поддерживает прозрачность: белая подложка вместо чёрных прозрачных пикселей.
+        var pixels=frame.Pixels.ToArray();
+        for(int i=0;i<pixels.Length;i+=4){int alpha=pixels[i+3];for(int channel=0;channel<3;channel++)pixels[i+channel]=(byte)((pixels[i+channel]*alpha+255*(255-alpha)+127)/255);pixels[i+3]=255;}
+        using var stream=new InMemoryRandomAccessStream();
+        var quality=new BitmapPropertySet{{"ImageQuality",new BitmapTypedValue(.95f,Windows.Foundation.PropertyType.Single)}};
+        var encoder=await BitmapEncoder.CreateAsync(BitmapEncoder.JpegEncoderId,stream,quality);
+        encoder.SetPixelData(BitmapPixelFormat.Bgra8,BitmapAlphaMode.Ignore,(uint)frame.Width,(uint)frame.Height,96,96,pixels);await encoder.FlushAsync();stream.Seek(0);
+        byte[] jpeg=new byte[(int)stream.Size];using var reader=new DataReader(stream);await reader.LoadAsync((uint)jpeg.Length);reader.ReadBytes(jpeg);return jpeg;
+    }
+    public static bool IsJpeg(string path)=>System.IO.Path.GetExtension(path).ToLowerInvariant() is ".jpg" or ".jpeg";
+    public static async Task<byte[]> ExportImage(byte[] png,string path)
+    {
+        if(!IsJpeg(path))return png;
+        using var stream=new InMemoryRandomAccessStream();using(var writer=new DataWriter(stream.GetOutputStreamAt(0))){writer.WriteBytes(png);await writer.StoreAsync();}stream.Seek(0);
+        var decoder=await BitmapDecoder.CreateAsync(stream);var data=await decoder.GetPixelDataAsync(BitmapPixelFormat.Bgra8,BitmapAlphaMode.Straight,new BitmapTransform(),ExifOrientationMode.IgnoreExifOrientation,ColorManagementMode.DoNotColorManage);
+        return await Jpeg(new ScreenFrame(0,0,(int)decoder.PixelWidth,(int)decoder.PixelHeight,data.DetachPixelData()));
+    }
 }

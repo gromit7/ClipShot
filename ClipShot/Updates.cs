@@ -64,6 +64,7 @@ internal sealed class GitHubUpdates : IDisposable
         // Загрузка установщика использует отдельный клиент, поскольку GitHub перенаправляет assets.
         feedHttp=handler is null?new HttpClient(new HttpClientHandler{AllowAutoRedirect=false}):new HttpClient(handler,disposeHandler:false);
         feedHttp.Timeout=TimeSpan.FromSeconds(10);feedHttp.DefaultRequestHeaders.UserAgent.ParseAdd("ClipShot/1.0");feedHttp.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+        feedHttp.DefaultRequestHeaders.CacheControl=new(){NoCache=true};
     }
     internal async Task<AppUpdate?> CheckAsync(Version version,CancellationToken token)
     {

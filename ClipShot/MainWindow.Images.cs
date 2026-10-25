@@ -27,12 +27,15 @@ public sealed partial class MainWindow
             Hide();byte[]? png=await editor.ShowAsync();editor=null;
             if(exiting)return;
             if(png is null){ShowNearCursor();return;}
+            // Копирование результата — применение к выбранному клипу, а не новый дубликат.
+            try{store.EditImage(clip.Id,png);}
+            catch(Microsoft.Data.Sqlite.SqliteException){ShowNearCursor();Status.Text=T("Такой снимок уже есть в истории. Исходный клип не изменён.");return;}
             if(!isolated)
             {
                 using var stream=new InMemoryRandomAccessStream();using(var writer=new DataWriter(stream.GetOutputStreamAt(0))){writer.WriteBytes(png);await writer.StoreAsync();}stream.Seek(0);
                 var data=new DataPackage{RequestedOperation=DataPackageOperation.Copy};data.SetBitmap(RandomAccessStreamReference.CreateFromStream(stream));Clipboard.SetContent(data);Clipboard.Flush();ownSequence=Native.GetClipboardSequenceNumber();
             }
-            if(!exiting){store.Add("image","",image:png);Render();}
+            if(!exiting)Render();
         }
         catch{editor?.Close();editor=null;if(!exiting){ShowNearCursor();Status.Text=T("Не удалось открыть редактор снимка.");}}
         finally{editor=null;dialogOpen=false;}
@@ -43,8 +46,8 @@ public sealed partial class MainWindow
         dialogOpen=true;
         try
         {
-            var picker=new FileSavePicker{SuggestedFileName="ClipShot-"+DateTime.Now.ToString("yyyy-MM-dd-HHmmss"),DefaultFileExtension=".png"};picker.FileTypeChoices.Add("PNG",new List<string>{".png"});WinRT.Interop.InitializeWithWindow.Initialize(picker,hwnd);
-            var file=await picker.PickSaveFileAsync();if(file is not null&&!exiting)await FileIO.WriteBytesAsync(file,clip.Image);
+            var picker=new FileSavePicker{SuggestedFileName="ClipShot-"+DateTime.Now.ToString("yyyy-MM-dd-HHmmss"),DefaultFileExtension=".png"};picker.FileTypeChoices.Add("PNG",new List<string>{".png"});picker.FileTypeChoices.Add("JPEG",new List<string>{".jpg",".jpeg"});WinRT.Interop.InitializeWithWindow.Initialize(picker,hwnd);
+            var file=await picker.PickSaveFileAsync();if(file is not null&&!exiting)await FileIO.WriteBytesAsync(file,await DesktopCapture.ExportImage(clip.Image,file.Path));
         }
         catch{if(!exiting)Status.Text=T("Не удалось сохранить снимок.");}
         finally{dialogOpen=false;}

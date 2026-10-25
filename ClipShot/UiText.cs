@@ -8,6 +8,11 @@ public sealed class UiText(string? language)
     public static string Russian(string text)=>EnglishText.FirstOrDefault(p=>p.Value==text).Key??text;
     private static readonly Dictionary<string,string> EnglishText=new(StringComparer.Ordinal)
     {
+        ["Значок трея скрывает и показывает окно. Правая кнопка на пустом месте — настройки, справка и выход. Перетаскивание за пустое место двигает окно; нижний угол меняет размер. Esc скрывает окно."]="The tray icon hides and shows the window. Right-click empty space for Settings, Help and Exit. Drag empty space to move; use the bottom corner to resize. Esc hides the window.",
+        ["Экспорт…"]="Export…",["Экспорт PNG или JPEG · Ctrl+S"]="Export PNG or JPEG · Ctrl+S",
+        ["Такой снимок уже есть в истории. Исходный клип не изменён."]="This image already exists in history. The original clip was not changed.",
+        ["Редактор: стрелки, рамки, текст, мозаика, скрытие, отмена и повтор. «Копировать в буфер» применяет правки к тому же клипу и буферу. «Экспорт» сохраняет отдельный PNG или JPEG."]="Editor: arrows, rectangles, text, mosaic, redaction, undo and redo. Copy to clipboard applies edits to the same clip and clipboard. Export saves a separate PNG or JPEG.",
+        ["Обновления с GitHub: по будням в 09:00 и 15:00, один маленький запрос. Установка сама после пяти минут без мыши и клавиатуры, когда окно скрыто и редактор закрыт. После — только плашка. Ручная проверка не требует сохранения настроек."]="GitHub updates: weekdays at 09:00 and 15:00, one small request. Installation is automatic after five minutes without input, while the window is hidden and the editor is closed. Only a notice afterwards. Manual checks do not require saving settings.",
         ["При выборе клипа"]="When selecting a clip",["Только в буфер"]="Clipboard only",["В буфер и в предыдущее приложение"]="Clipboard and previous application",
         ["Копировать в буфер"]="Copy to clipboard",["Копировать в буфер · Enter"]="Copy to clipboard · Enter",["Сохранить PNG"]="Save PNG",
         ["Установка обновлений"]="Update installation",["Автоматически, когда ПК не используется"]="Automatically while the PC is idle",["Только по нажатию"]="Only when I click",
@@ -103,5 +108,15 @@ public sealed class UiText(string? language)
         ["Не удалось назначить кнопку мыши."]="Could not assign the mouse button.",
         ["Не все микрофоны удалось переключить. Проверьте подключение."]="Some microphones could not be switched. Check their connection.",
         ["Выбранная боковая кнопка переключает микрофон вместо перехода назад/вперёд. В Logi Options+ можно назначить Ctrl+Alt+M на кнопку MX Vertical. Зелёный — включён, красный — выключен, жёлтый — смешанный статус, серый — недоступен. Статус означает отключение звука в Windows, а не использование микрофона приложением."]="The selected side button toggles the microphone instead of navigating back/forward. In Logi Options+, you can assign Ctrl+Alt+M to an MX Vertical button. Green: on; red: muted; yellow: mixed; grey: unavailable. Status indicates Windows mute, not whether an app is using the microphone.",
+        ["На неделе"]="This week",["Месяц"]="This month",["Ранее"]="Earlier",
+        ["Проверить обновление"]="Check for updates",
+        ["Переместить окно"]="Move window",
+        ["Программа обновлена"]="Application updated",["Программа установлена"]="Application installed",
+        ["Обновлений нет"]="No updates available",["Не удалось проверить обновления"]="Could not check for updates",
+        ["Повторите позже."]="Please try again later.",["Обновление скачано"]="Update downloaded",
+        ["Установится во время перерыва."]="Will install during a break.",["Не удалось скачать обновление"]="Could not download the update",
+        ["Не удалось установить обновление"]="Could not install the update",
+        ["Компактная панель: даты сверху, шаблоны снизу, поиск под лупой. Щелчок вне программы плавно скрывает панель. Значок трея и Alt+F1 возвращают её. Правая кнопка на пустом месте — настройки и справка; нижний угол меняет размер."]="Compact panel: dates above, templates below, search under the magnifier. Clicking outside gently hides the panel. The tray icon and Alt+F1 restore it. Right-click empty space for Settings and Help; drag the lower corner to resize.",
+        ["Обновления с GitHub: две фоновые проверки в рабочий день. Скачивание в фоне, установка во время перерыва с сохранением данных. После — только плашка «Программа обновлена». Ручная проверка — в меню трея, одним нажатием."]="GitHub updates: two background checks per workday. Downloads happen in the background; installation runs during a break and preserves data. Afterwards, only an Application updated notice. Check manually with one click in the tray menu.",
     };
 }
