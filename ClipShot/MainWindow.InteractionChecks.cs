@@ -68,7 +68,7 @@ public sealed partial class MainWindow
             Native.PostMessage(hwnd,App.UpdateQuitMessage,(nint)unchecked((uint)Environment.TickCount+5000),0);await Task.Delay(100);
             Check(!exiting&&AppWindow.IsVisible,"automatic shutdown request cannot close an active test window");
             store.Set("updateinstall","manual");Check(AutomaticUpdates,"legacy manual preference keeps background updates enabled");store.Set("updateinstall","auto");
-            Search.Text="EXAMPLE";
+            OpenSearchClick(this,new());await Task.Delay(50);Search.Text="EXAMPLE";
             await Task.Delay(100);
             Check(visible.Count==2&&visible.All(v=>v.Clip.Kind=="text"),"case insensitive text search across templates and history");
             Check(visible[0].Clip.Template,"templates precede history");
@@ -94,7 +94,12 @@ public sealed partial class MainWindow
             Search.Text="test";Hide();
             Check(Search.Text==""&&!preview.IsOpen,"hide clears query and preview");
             ShowNearCursor();
-            Check(ReferenceEquals(FocusManager.GetFocusedElement(Root.XamlRoot),Search),"opening focuses search");
+            Check(Search.Visibility==Visibility.Collapsed&&!ReferenceEquals(FocusManager.GetFocusedElement(Root.XamlRoot),Search),"opening keeps search collapsed and never focuses its textbox");
+            OpenSearchClick(this,new());
+            Check(Search.Visibility==Visibility.Visible&&SearchClose.Visibility==Visibility.Visible&&ReferenceEquals(FocusManager.GetFocusedElement(Root.XamlRoot),Search),"magnifier explicitly opens and focuses search");
+            OpenSearchClick(this,new());await Task.Delay(50);Search.Text="EXAMPLE";await Task.Delay(100);CloseSearchClick(this,new());await Task.Delay(100);
+            Check(Search.Visibility==Visibility.Collapsed&&Search.Text==""&&!ReferenceEquals(FocusManager.GetFocusedElement(Root.XamlRoot),Search),"closing search clears the filter and releases text focus");
+            OpenSearchClick(this,new());
             Check(!trayReady&&!historyKeyReady&&!screenshotKeyReady,"test mode has no tray or global hotkeys");
             uint sequence=Native.GetClipboardSequenceNumber();int count=store.All().Count;
             Search.Text="test";await Task.Delay(100);

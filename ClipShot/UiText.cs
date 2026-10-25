@@ -55,7 +55,7 @@ public sealed class UiText(string? language)
         ["буфер обмена и скриншоты"]="clipboard and screenshots",
         ["Справка"]="Help",["Я верю в тебя, ты разберёшься сам."]="I believe in you. You'll figure it out.",["Понятно"]="Got it",
         ["Настройки"]="Settings",["Настройки ClipShot"]="ClipShot settings",
-        ["Поиск по истории"]="Search history",["Поиск по истории и шаблонам"]="Search history and templates",
+        ["Закрыть поиск"]="Close search",["Поиск по истории"]="Search history",["Поиск по истории и шаблонам"]="Search history and templates",
         ["Выбрать"]="Select",["Копировать"]="Copy",["Закрыть"]="Close",
         ["Шаблоны"]="Templates",["Сегодня"]="Today",["Вчера"]="Yesterday",["Ранее на этой неделе"]="Earlier this week",["Более старые"]="Older",
         ["Ничего не найдено"]="No matches",["Скопируйте текст или картинку — они появятся здесь."]="Copy text or an image to see it here.",

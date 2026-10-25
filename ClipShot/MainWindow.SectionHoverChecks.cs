@@ -22,7 +22,7 @@ public sealed partial class MainWindow
         Check(!sectionPopup.IsOpen&&sectionHoverTimer.IsEnabled,"hover waits briefly instead of flashing open while crossing a heading");
         await Await(()=>sectionPopup.IsOpen);
         Check(sectionPopup.IsOpen&&activeSection=="Сегодня"&&selected==-1,"today opens on hover without activating or selecting a clip");
-        Check(ReferenceEquals(focus,FocusManager.GetFocusedElement(Root.XamlRoot)),"hover keeps keyboard focus in the existing search field");
+        Check(ReferenceEquals(focus,FocusManager.GetFocusedElement(Root.XamlRoot)),"hover preserves the existing keyboard focus without opening search");
         today=sectionHeadings["Сегодня"];QueueSectionHover("Сегодня",today);
         Check(!sectionHoverTimer.IsEnabled&&ReferenceEquals(today,sectionHeadings["Сегодня"]),"hovering an open heading does not rebuild or toggle its rows");
         var templates=sectionHeadings["Шаблоны"];
@@ -36,7 +36,7 @@ public sealed partial class MainWindow
         Check(!sectionPopup.IsOpen,"click can close a hovered panel without immediately reopening it");
         LeaveSectionHover("Шаблоны",sectionHeadings["Шаблоны"]);QueueSectionHover("Шаблоны",sectionHeadings["Шаблоны"]);await Await(()=>sectionPopup.IsOpen);
         Check(sectionPopup.IsOpen&&activeSection=="Шаблоны","leaving and reentering a clicked heading enables hover again");
-        QueueSectionHover("Сегодня",sectionHeadings["Сегодня"]);Search.Text="EXAMPLE";await Task.Delay(280);
+        OpenSearchClick(this,new());await Task.Delay(50);QueueSectionHover("Сегодня",sectionHeadings["Сегодня"]);Search.Text="EXAMPLE";await Task.Delay(280);
         Check(!sectionPopup.IsOpen&&!sectionHoverTimer.IsEnabled&&Search.Text=="EXAMPLE","search cancels a delayed hover and keeps the typed query");
         Search.Text="";await Task.Delay(80);store.Set("sectionlayout","inline");expanded["Сегодня"]=false;Render();await Task.Delay(80);
         suppressedHoverSection=null;QueueSectionHover("Сегодня",sectionHeadings["Сегодня"]);await Await(()=>expanded.GetValueOrDefault("Сегодня"));

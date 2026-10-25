@@ -21,7 +21,10 @@ public sealed partial class MainWindow
         string version=typeof(App).Assembly.GetName().Version?.ToString(3)??"";
         Title=$"ClipShot {version} — {T("буфер обмена и скриншоты")}";TitleText.Text="ClipShot";Search.PlaceholderText="";
         ToolTipService.SetToolTip(Search,T("Поиск по истории"));
-        ToolTipService.SetToolTip(SearchGlyph,T("Переместить окно"));
+        ToolTipService.SetToolTip(SearchToggle,T("Поиск по истории"));
+        AutomationProperties.SetName(SearchToggle,T("Поиск по истории"));
+        ToolTipService.SetToolTip(SearchClose,T("Закрыть поиск"));
+        AutomationProperties.SetName(SearchClose,T("Закрыть поиск"));
         SelectHint.Text=T("Выбрать");CopyHint.Text=T("Копировать");CloseHint.Text=T("Закрыть");
         AutomationProperties.SetName(Search,T("Поиск по истории и шаблонам"));
         AutomationProperties.SetName(SettingsButton,T("Настройки"));ToolTipService.SetToolTip(SettingsButton,T("Настройки"));

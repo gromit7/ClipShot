@@ -160,9 +160,9 @@ public sealed partial class MainWindow : Window
         var area=DisplayArea.GetFromPoint(new PointInt32(p.X,p.Y),DisplayAreaFallback.Nearest).WorkArea;
         int x=Math.Clamp(p.X+12,area.X,Math.Max(area.X,area.X+area.Width-AppWindow.Size.Width));
         int y=Math.Clamp(p.Y+12,area.Y,Math.Max(area.Y,area.Y+area.Height-AppWindow.Size.Height));
-        AppWindow.Move(new PointInt32(x,y));AppWindow.Show();Activate();Native.SetForegroundWindow(hwnd);Search.Focus(FocusState.Programmatic);PositionSection();WatchPanelFocus();ShowUpdateOffer();
+        AppWindow.Move(new PointInt32(x,y));AppWindow.Show();Activate();Native.SetForegroundWindow(hwnd);FocusPanel();PositionSection();WatchPanelFocus();ShowUpdateOffer();
     }
-    private void Hide(){EndWindowPointerGesture();CancelSectionHover();CancelPanelFade();activeDialog?.Hide();sectionFocusTimer.Stop();sectionPopup.IsOpen=false;preview.IsOpen=false;hoverTimer.Stop();leaveTimer.Stop();AppWindow.Hide();Search.Text="";}
+    private void Hide(){EndWindowPointerGesture();CancelSectionHover();CancelPanelFade();activeDialog?.Hide();sectionFocusTimer.Stop();sectionPopup.IsOpen=false;preview.IsOpen=false;hoverTimer.Stop();leaveTimer.Stop();AppWindow.Hide();CollapseSearch(false);}
     private void ToggleVisibility()
     {
         if(exiting||takingScreenshot)return;
@@ -263,7 +263,7 @@ public sealed partial class MainWindow : Window
             ownSequence=Native.GetClipboardSequenceNumber();
             // Choosing an existing clip is a new use, without recording a duplicate.
             store.Add(clip.Kind,clip.Text,clip.Html,clip.Rtf,clip.Image);CollapseSection();Render();
-            if(store.Get("autopaste","0")=="1")await TryPastePrevious();else Search.Focus(FocusState.Programmatic);
+            if(store.Get("autopaste","0")=="1")await TryPastePrevious();else FocusPanel();
         }
         catch {Status.Text=T("Не удалось скопировать. Повторите выбор.");}
     }
@@ -365,7 +365,7 @@ public sealed partial class MainWindow : Window
     private void RootKeyDown(object sender,KeyRoutedEventArgs e)
     {
         if(dialogOpen)return;
-        if(e.Key==VirtualKey.Escape){Hide();e.Handled=true;return;}
+        if(e.Key==VirtualKey.Escape){if(Search.Visibility==Visibility.Visible)CollapseSearch();else Hide();e.Handled=true;return;}
         if(e.Key==VirtualKey.Down||e.Key==VirtualKey.Up)
         {if(visible.Count>0){selected=Math.Clamp(selected+(e.Key==VirtualKey.Down?1:-1),0,visible.Count-1);Highlight();visible[selected].Row.StartBringIntoView();}e.Handled=true;}
         if(e.Key==VirtualKey.Enter&&selected>=0){_=Copy(visible[selected].Clip);e.Handled=true;}
@@ -540,7 +540,7 @@ public sealed partial class MainWindow : Window
         {
             timer.Stop();Directory.CreateDirectory(dataFolder);
             var p=SettingsButton.TransformToVisual(Root).TransformPoint(new Windows.Foundation.Point(0,0));
-            bool layout=Search.ActualHeight>=30&&Search.ActualHeight<=34&&Search.ActualWidth>180&&Search.PlaceholderText.Length==0&&Search.TransformToVisual(Root).TransformPoint(new Windows.Foundation.Point()).Y>=HistoryScroll.ActualHeight&&HeaderSurface.Visibility==Visibility.Collapsed&&Root.ContextFlyout is MenuFlyout;
+            bool layout=Search.Visibility==Visibility.Collapsed&&SearchToggle.ActualHeight>=30&&SearchToggle.ActualWidth>=30&&Search.PlaceholderText.Length==0&&Search.TransformToVisual(Root).TransformPoint(new Windows.Foundation.Point()).Y>=HistoryScroll.ActualHeight&&HeaderSurface.Visibility==Visibility.Collapsed&&Root.ContextFlyout is MenuFlyout;
             bool pass=layout&&Root.XamlRoot is not null&&visible.Count==6;
             File.WriteAllText(Path.Combine(dataFolder,"ui-ok.txt"),$"{(pass?"PASS":"FAIL")} WinUI launched; visible rows={visible.Count}; XamlRoot={Root.XamlRoot is not null}; Theme={Root.ActualTheme}; ThemeId={activeTheme.Id}; Acrylic={SystemBackdrop is DesktopAcrylicBackdrop}; Layout={layout}; CaptionInset={AppWindow.TitleBar.RightInset}; SearchWidth={Search.ActualWidth}; SettingsX={p.X}");
             if(Environment.GetCommandLineArgs().Contains("--interaction-self-test"))pass=await RunInteractionChecks()&&pass;

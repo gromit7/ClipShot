@@ -38,8 +38,9 @@
   <StackPanel x:Name="TemplateGroups" Grid.Row="2"/>
   <Border Grid.Row="3" Padding="6,3,24,3" BorderBrush="{ThemeResource ClipSeparatorBrush}" BorderThickness="0,1,0,0">
    <Grid>
-    <TextBox x:Name="Search" AutomationProperties.Name="Поиск по истории и шаблонам" TextChanged="SearchChanged" Height="32" FontSize="13" Padding="32,4,10,4" CornerRadius="4" BorderThickness="0" Background="Transparent"/>
-    <FontIcon x:Name="SearchGlyph" Glyph="&#xE721;" FontSize="14" Foreground="{ThemeResource ClipSecondaryBrush}" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" ToolTipService.ToolTip="Переместить окно"/>
+    <TextBox x:Name="Search" Visibility="Collapsed" Margin="32,0,32,0" AutomationProperties.Name="Поиск по истории и шаблонам" TextChanged="SearchChanged" Height="32" FontSize="13" Padding="6,4,6,4" CornerRadius="4" BorderThickness="0" Background="Transparent"/>
+    <Button x:Name="SearchToggle" Click="OpenSearchClick" Width="32" Height="32" Padding="0" HorizontalAlignment="Left" Background="Transparent" BorderThickness="0" AutomationProperties.Name="Поиск по истории"><FontIcon x:Name="SearchGlyph" Glyph="&#xE721;" FontSize="14" Foreground="{ThemeResource ClipSecondaryBrush}"/></Button>
+    <Button x:Name="SearchClose" Click="CloseSearchClick" Visibility="Collapsed" Width="28" Height="32" Padding="0" HorizontalAlignment="Right" Background="Transparent" BorderThickness="0" AutomationProperties.Name="Закрыть поиск" Content="×"/>
    </Grid>
   </Border>
   <ScrollViewer x:Name="HistoryScroll" Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"><StackPanel x:Name="Groups" Spacing="0"/></ScrollViewer>

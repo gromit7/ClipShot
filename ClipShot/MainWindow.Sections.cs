@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
@@ -67,7 +67,7 @@ public sealed partial class MainWindow
     private void ToggleSection(string title)
     {
         CancelSectionHover();suppressedHoverSection=title;
-        if(SideSections){activeSection=activeSection==title?null:title;sectionInitialized=true;Render();Search.Focus(FocusState.Programmatic);}
+        if(SideSections){activeSection=activeSection==title?null:title;sectionInitialized=true;Render();FocusPanel();}
         else{expanded[title]=!expanded.GetValueOrDefault(title);Render();}
     }
 }

@@ -29,7 +29,7 @@ public sealed partial class MainWindow
         {
             if(enlarged&&!exiting)AppWindow.MoveAndResize(original);
             if(ReferenceEquals(activeDialog,dialog)){activeDialog=null;dialogOpen=false;}
-            if(!exiting&&AppWindow.IsVisible){Search.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);WatchPanelFocus();}
+            if(!exiting&&AppWindow.IsVisible){FocusPanel();WatchPanelFocus();}
         }
     }
 }
