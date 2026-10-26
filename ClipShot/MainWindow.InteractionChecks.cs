@@ -38,10 +38,14 @@ public sealed partial class MainWindow
             Check(AppWindow.Size.Width<400&&AppWindow.Size.Height<300&&Search.PlaceholderText.Length==0,"default panel is compact and empty search has only a magnifier");
             await RunSectionHoverChecks(results);
             await RunWindowDragChecks(results);
+            await RunInlinePanelChecks(results);
             var presenter=(Microsoft.UI.Windowing.OverlappedPresenter)AppWindow.Presenter;
             var pin=((Microsoft.UI.Xaml.Controls.MenuFlyout)Root.ContextFlyout).Items.OfType<Microsoft.UI.Xaml.Controls.ToggleMenuFlyoutItem>().Single(i=>Equals(i.Tag,"alwaysontop"));
             Check(!AlwaysOnTop&&!presenter.IsAlwaysOnTop&&!pin.IsChecked,"always-on-top is off by default in both saved preference and presenter");
             pin.IsChecked=true;AlwaysOnTopClick(pin,new());
+            // Presenter updates the HWND asynchronously; verify the resulting
+            // native state, rather than racing its queued commit in this check.
+            for(int wait=0;wait<20&&((long)Native.GetWindowLongPtr(hwnd,-20)&8)==0;wait++)await Task.Delay(25);
             Check(AlwaysOnTop&&presenter.IsAlwaysOnTop&&((long)Native.GetWindowLongPtr(hwnd,-20)&8)!=0,"context toggle enables native topmost window and saves preference");
             using(var persisted=new Store(Path.Combine(dataFolder,"clips.db")))Check(persisted.Get("alwaysontop","0")=="1","always-on-top preference survives reopening the synthetic store");
             presenter.IsAlwaysOnTop=false;ApplyAlwaysOnTop();ConfigureWindowContextMenu();
@@ -154,6 +158,22 @@ public sealed partial class MainWindow
             nint foreground=Native.GetForegroundWindow();
             var notice=new MicrophoneNotice("Тестовый микрофон включён","Синтетические данные",MicrophoneState.Enabled);await Task.Delay(200);
             Check(Native.GetForegroundWindow()==foreground,"microphone notice does not steal focus");notice.Close();
+            var releases=ReleaseHistory.Load(Path.Combine(AppContext.BaseDirectory,"Assets","ReleaseHistory.json"),typeof(App).Assembly.GetName().Version!);
+            Check(releases.Count==5,"publication contains changes for the five latest installed releases");
+            var updateNotice=new MicrophoneNotice("Программа обновлена","Синтетические данные",MicrophoneState.Enabled,preview:true,appNotice:true,history:releases);
+            await Task.Delay(200);
+            Microsoft.UI.Xaml.Controls.ScrollViewer? HistoryScrollIn(DependencyObject node)
+            {
+                if(node is Microsoft.UI.Xaml.Controls.ScrollViewer scroll)return scroll;
+                for(int i=0;i<Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(node);i++)if(HistoryScrollIn(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(node,i)) is {} found)return found;
+                return null;
+            }
+            var historyScroll=HistoryScrollIn((DependencyObject)updateNotice.Content);
+            Check(historyScroll is {ActualHeight:>0}&&historyScroll.ExtentHeight>historyScroll.ViewportHeight,"five-release update notice has a visible bounded scroll area for reading all changes");
+            var noticeArea=Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(updateNotice.AppWindow.Id,Microsoft.UI.Windowing.DisplayAreaFallback.Nearest).WorkArea;
+            Check(updateNotice.AppWindow.Size.Height<=noticeArea.Height&&updateNotice.AppWindow.Position.Y>=noticeArea.Y,"expanded update notice fits the actual monitor work area");
+            updateNotice.Close();
+            await RunClipdiaryChecks(results);
             foreach(var state in Enum.GetValues<MicrophoneState>()){nint icon=MicrophoneIcon(state);Check(icon!=0,"shared ClipShot tray icon "+state);if(icon!=0)Native.DestroyIcon(icon);}
             Native.PostMessage(hwnd,0x0112,0xF020,0);await Task.Delay(150);
             Check(!AppWindow.IsVisible,"minimize hides the window to the tray");ShowNearCursor();

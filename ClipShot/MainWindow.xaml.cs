@@ -88,9 +88,9 @@ public sealed partial class MainWindow : Window
         AppWindow.Closing+=(_,e)=>{ if(!exiting){e.Cancel=true;Hide();} };
         AppWindow.Changed+=(_,e)=> { if(!exiting&&!windowResizing&&!dialogOpen&&!compactResizing&&e.DidSizeChange && AppWindow.Size.Width>0){ store.Set("width",AppWindow.Size.Width.ToString());store.Set("height",AppWindow.Size.Height.ToString()); } };
         Root.Loaded+=(_,_)=>{PositionSection();WatchPanelFocus();};AppWindow.Changed+=(_,_)=>{if(!exiting)PositionSection();};
-        if(isolated) SeedSmoke();
+        if(isolated) SeedSmoke();else StartClipdiaryOffer();
     }
-    private void Prune()=>store.Prune(AppSettings.RetentionDays(store.Get("days","90")));
+    private void Prune(){if(!clipdiaryImportRunning)store.Prune(AppSettings.RetentionDays(store.Get("days","90")));}
     private bool RegisterKey()
     {
         bool ok=Native.RegisterHotKey(hwnd,1,Win32Hotkey.Modifiers(store.Get("ctrl","0")=="1"),AppSettings.FunctionKey(store.Get("key","112"),112));
@@ -156,11 +156,24 @@ public sealed partial class MainWindow : Window
         RememberPasteTarget();
         if(editor is not null){editor.AppWindow.Show();editor.Activate();return;}
         if(takingScreenshot||exiting||startupUpdatePending)return;
+        if(clipdiaryImportRunning){AppWindow.Show();Activate();return;}
         CancelPanelFade();Prune();Render();Native.GetCursorPos(out var p);
-        var area=DisplayArea.GetFromPoint(new PointInt32(p.X,p.Y),DisplayAreaFallback.Nearest).WorkArea;
-        int x=Math.Clamp(p.X+12,area.X,Math.Max(area.X,area.X+area.Width-AppWindow.Size.Width));
-        int y=Math.Clamp(p.Y+12,area.Y,Math.Max(area.Y,area.Y+area.Height-AppWindow.Size.Height));
-        AppWindow.Move(new PointInt32(x,y));AppWindow.Show();Activate();Native.SetForegroundWindow(hwnd);FocusPanel();PositionSection();WatchPanelFocus();ShowUpdateOffer();
+        if(InlineLayout)
+        {
+            var area=DisplayArea.Primary.WorkArea;
+            var bounds=InlinePanelPlacement.Choose(AppWindow.Size.Width,AppWindow.Position.Y,area.X,area.Y,area.Width,area.Height,AppWindow.Size.Height,1);
+            compactResizing=true;
+            try{AppWindow.MoveAndResize(new RectInt32(bounds.X,bounds.Y,bounds.Width,bounds.Height));}
+            finally{compactResizing=false;}
+        }
+        else
+        {
+            var area=DisplayArea.GetFromPoint(new PointInt32(p.X,p.Y),DisplayAreaFallback.Nearest).WorkArea;
+            int x=Math.Clamp(p.X+12,area.X,Math.Max(area.X,area.X+area.Width-AppWindow.Size.Width));
+            int y=Math.Clamp(p.Y+12,area.Y,Math.Max(area.Y,area.Y+area.Height-AppWindow.Size.Height));
+            AppWindow.Move(new PointInt32(x,y));
+        }
+        AppWindow.Show();Activate();Native.SetForegroundWindow(hwnd);FocusPanel();PositionSection();WatchPanelFocus();ShowUpdateOffer();
     }
     private void Hide(){EndWindowPointerGesture();CancelSectionHover();CancelPanelFade();activeDialog?.Hide();sectionFocusTimer.Stop();sectionPopup.IsOpen=false;preview.IsOpen=false;hoverTimer.Stop();leaveTimer.Stop();AppWindow.Hide();CollapseSearch(false);}
     private void ToggleVisibility()
@@ -172,6 +185,7 @@ public sealed partial class MainWindow : Window
     private void Quit()
     {
         if(exiting)return;
+        if(clipdiaryImportRunning){if(!quitAfterClipdiaryImport)_=CancelImportAndQuit();return;}
         EndWindowPointerGesture();exiting=true;CancelSectionHover();CancelPanelFade();activeDialog?.Hide();sectionFocusTimer.Stop();sectionPopup.IsOpen=false;StopUpdates();StopMicrophone();hoverTimer.Stop();leaveTimer.Stop();cleanupTimer.Stop();
         captureWindow?.Cancel();
         editor?.Close();
@@ -229,12 +243,12 @@ public sealed partial class MainWindow : Window
                         var encoder=await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId,output);encoder.SetSoftwareBitmap(bitmap);await encoder.FlushAsync();
                         if(output.Size>50*1024*1024){Status.Text=T("Изображение больше 50 МБ не сохранено.");break;}
                         output.Seek(0);byte[] bytes=new byte[(int)output.Size];using var reader=new DataReader(output);await reader.LoadAsync((uint)bytes.Length);reader.ReadBytes(bytes);
-                        store.Add("image","",image:bytes);
+                        await AddCapturedClip("image","",image:bytes);
                     }
                     else if(content.Contains(StandardDataFormats.Text))
                     {
                         string text=await content.GetTextAsync();
-                        if(text.Length>0)store.Add("text",text,content.Contains(StandardDataFormats.Html)?await content.GetHtmlFormatAsync():"",content.Contains(StandardDataFormats.Rtf)?await content.GetRtfAsync():"");
+                        if(text.Length>0)await AddCapturedClip("text",text,content.Contains(StandardDataFormats.Html)?await content.GetHtmlFormatAsync():"",content.Contains(StandardDataFormats.Rtf)?await content.GetRtfAsync():"");
                     }
                     Render();break;
                 }

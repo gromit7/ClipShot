@@ -12,6 +12,8 @@ public sealed partial class MainWindow
     private bool panelFading,panelFadeReady;
     private long panelFadeStarted;
     private nint panelOriginalStyle;
+    private bool inlineSizingReady,inlineFitQueued,inlineFitting;
+    private bool InlineLayout=>store.Get("sectionlayout","side")=="inline";
     private bool AlwaysOnTop=>store.Get("alwaysontop","0")=="1";
     private void ApplyAlwaysOnTop()
     {
@@ -32,6 +34,8 @@ public sealed partial class MainWindow
     }
     private void FitCompactPanel(List<ClipGroup> groups)
     {
+        EnsureInlineSizing();
+        if(InlineLayout){compactGroupCount=-1;QueueInlinePanelFit();return;}
         int count=groups.Count(g=>g.Clips.Count>0);
         if(!SideSections||compactGroupCount==count||dialogOpen||windowResizing)return;
         compactGroupCount=count;
@@ -42,6 +46,50 @@ public sealed partial class MainWindow
         try{AppWindow.Resize(new SizeInt32(Math.Max(AppWindow.Size.Width,(int)(220*scale)),height));}
         finally{compactResizing=false;}
         DispatcherQueue.TryEnqueue(PositionSection);
+    }
+    private void EnsureInlineSizing()
+    {
+        if(inlineSizingReady)return;inlineSizingReady=true;
+        Root.Loaded+=(_,_)=>QueueInlinePanelFit();
+        Root.SizeChanged+=(_,_)=>QueueInlinePanelFit();
+        Groups.SizeChanged+=(_,_)=>QueueInlinePanelFit();
+        FooterSurface.SizeChanged+=(_,_)=>QueueInlinePanelFit();
+    }
+    private void QueueInlinePanelFit()
+    {
+        // Отложенный layout может прийти уже после Quit/store.Dispose.
+        // InlineLayout читает настройки, поэтому exiting проверяется первым.
+        if(exiting||!InlineLayout||inlineFitQueued||inlineFitting||dialogOpen||windowResizing||compactResizing||takingScreenshot||editor is not null||!AppWindow.IsVisible)return;
+        inlineFitQueued=true;
+        if(!DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,()=>{inlineFitQueued=false;FitInlinePanel();}))inlineFitQueued=false;
+    }
+    private void FitInlinePanel()
+    {
+        if(exiting||!InlineLayout||inlineFitting||dialogOpen||windowResizing||takingScreenshot||editor is not null||!AppWindow.IsVisible||Root.XamlRoot is null)return;
+        inlineFitting=true;
+        try
+        {
+            Root.UpdateLayout();
+            var area=DisplayArea.Primary.WorkArea;
+            if(area.Width<=0||area.Height<=0)return;
+            double scale=Root.XamlRoot.RasterizationScale;
+            if(!double.IsFinite(scale)||scale<=0)return;
+            int chromeHeight=(int)Math.Max(0,Math.Round(AppWindow.Size.Height-Root.ActualHeight*scale));
+            int chromeWidth=(int)Math.Max(0,Math.Round(AppWindow.Size.Width-Root.ActualWidth*scale));
+            int width=Math.Min(area.Width,Math.Max(AppWindow.Size.Width,(int)Math.Ceiling(Root.MinWidth*scale)+chromeWidth));
+            // В обычном layout звёздная строка ограничивает viewport. Для уменьшения
+            // окна тоже нужен естественный размер содержимого, без этой границы.
+            Root.Measure(new Windows.Foundation.Size(Math.Max(1,(width-chromeWidth)/scale),double.PositiveInfinity));
+            double contentHeight=Root.DesiredSize.Height;
+            Root.InvalidateMeasure();
+            if(!double.IsFinite(contentHeight))return;
+            var bounds=InlinePanelPlacement.Choose(width,AppWindow.Position.Y,area.X,area.Y,area.Width,area.Height,contentHeight,scale,chromeHeight);
+            if(AppWindow.Position.X==bounds.X&&AppWindow.Position.Y==bounds.Y&&AppWindow.Size.Width==bounds.Width&&AppWindow.Size.Height==bounds.Height)return;
+            compactResizing=true;
+            try{AppWindow.MoveAndResize(new RectInt32(bounds.X,bounds.Y,bounds.Width,bounds.Height));}
+            finally{compactResizing=false;}
+        }
+        finally{inlineFitting=false;}
     }
     private void TrackMenu(MenuFlyout menu)
     {

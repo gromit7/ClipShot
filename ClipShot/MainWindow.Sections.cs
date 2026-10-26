@@ -49,6 +49,8 @@ public sealed partial class MainWindow
     }
     private void PositionSection()
     {
+        if(exiting)return;
+        if(InlineLayout){sectionPopup.IsOpen=false;QueueInlinePanelFit();return;}
         if(exiting||windowResizing||dialogOpen||panelFading||!SideSections||sectionBorder is null||activeSection is null||!AppWindow.IsVisible||Root.XamlRoot is null){sectionPopup.IsOpen=false;return;}
         var area=DisplayArea.GetFromWindowId(AppWindow.Id,DisplayAreaFallback.Nearest).WorkArea;double scale=Math.Max(1,Native.GetDpiForWindow(hwnd)/96d);
         var origin=new Native.Point();Native.ClientToScreen(hwnd,ref origin);

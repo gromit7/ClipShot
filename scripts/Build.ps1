@@ -8,6 +8,7 @@ if(-not $dotnet){$command=Get-Command dotnet -ErrorAction SilentlyContinue;if($c
 if(-not $dotnet){throw 'Run scripts/Setup.ps1 first.'}
 Push-Location $repo
 try{
+    & (Join-Path $PSScriptRoot 'New-ReleaseHistory.ps1')
     & $dotnet build ClipShot/ClipShot.csproj -c Release;if($LASTEXITCODE -ne 0){throw 'Build failed'}
     if($Test){& $dotnet test ClipShot.Checks/ClipShot.Checks.csproj -c Release --logger 'trx;LogFileName=core.trx' --results-directory (Join-Path $repo 'TestResults');if($LASTEXITCODE -ne 0){throw 'Checks failed'}}
     if($Publish){
