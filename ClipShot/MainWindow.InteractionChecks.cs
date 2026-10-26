@@ -47,6 +47,8 @@ public sealed partial class MainWindow
             // native state, rather than racing its queued commit in this check.
             for(int wait=0;wait<20&&((long)Native.GetWindowLongPtr(hwnd,-20)&8)==0;wait++)await Task.Delay(25);
             Check(AlwaysOnTop&&presenter.IsAlwaysOnTop&&((long)Native.GetWindowLongPtr(hwnd,-20)&8)!=0,"context toggle enables native topmost window and saves preference");
+            panelOriginalStyle=(nint)((long)Native.GetWindowLongPtr(hwnd,-20)&~8L);panelFading=true;CancelPanelFade();
+            Check(((long)Native.GetWindowLongPtr(hwnd,-20)&8)!=0&&presenter.IsAlwaysOnTop,"finishing a fade with an older style snapshot preserves a later native topmost change");
             using(var persisted=new Store(Path.Combine(dataFolder,"clips.db")))Check(persisted.Get("alwaysontop","0")=="1","always-on-top preference survives reopening the synthetic store");
             presenter.IsAlwaysOnTop=false;ApplyAlwaysOnTop();ConfigureWindowContextMenu();
             Check(presenter.IsAlwaysOnTop&&((Microsoft.UI.Xaml.Controls.MenuFlyout)Root.ContextFlyout).Items.OfType<Microsoft.UI.Xaml.Controls.ToggleMenuFlyoutItem>().Single(i=>Equals(i.Tag,"alwaysontop")).IsChecked,"startup application and rebuilt menu restore saved topmost preference");
@@ -129,7 +131,7 @@ public sealed partial class MainWindow
             ShowPreview();for(int attempt=0;attempt<20&&Status.Text=="";attempt++)await Task.Delay(100);
             Check(!preview.IsOpen&&Status.Text.Contains("предпросмотр"),"invalid image preview reports error without crashing");
             var help=CreateHelpDialog();var helpTask=help.ShowAsync();await Task.Delay(150);
-            Check(help.Content is Microsoft.UI.Xaml.Controls.ScrollViewer helpScroll&&helpScroll.Content is Microsoft.UI.Xaml.Controls.TextBlock helpText&&helpText.Text.Contains("Alt+F1")&&helpText.Text.Contains("Микрофон")&&helpText.Text.Contains("Обновления с GitHub")&&!helpText.Text.Contains("Я верю"),"help lists implemented features and current shortcuts without jokes");
+            Check(help.Content is Microsoft.UI.Xaml.Controls.ScrollViewer helpScroll&&helpScroll.Content is Microsoft.UI.Xaml.Controls.TextBlock helpText&&helpText.Text.Contains("Alt+F1")&&helpText.Text.Contains("Микрофон")&&helpText.Text.Contains("Обновления с VDS")&&!helpText.Text.Contains("Я верю"),"help lists implemented features and current shortcuts without jokes");
             help.Hide();await helpTask;
             SettingsClick(this,new());await Task.Delay(200);
             Check(activeDialog is not null&&dialogOpen,"settings hold a tracked modal dialog");

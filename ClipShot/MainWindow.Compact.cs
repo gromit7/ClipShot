@@ -20,7 +20,12 @@ public sealed partial class MainWindow
         // Сначала снимаем анимационный WS_EX_LAYERED: восстановление старого
         // extended style после смены presenter могло бы отменить TOPMOST.
         CancelPanelFade();
-        if(AppWindow.Presenter is OverlappedPresenter presenter)presenter.IsAlwaysOnTop=AlwaysOnTop;
+        bool top=AlwaysOnTop;
+        if(AppWindow.Presenter is OverlappedPresenter presenter)presenter.IsAlwaysOnTop=top;
+        // Keep the actual HWND in the same Z-order group as the saved preference.
+        // Presenter state alone can remain true while a native style update has
+        // already removed WS_EX_TOPMOST. Do not activate or move the window.
+        Native.SetWindowPos(hwnd,top?(nint)(-1):(nint)(-2),0,0,0,0,0x13);
     }
     private void AlwaysOnTopClick(object sender,RoutedEventArgs e)
     {
@@ -144,6 +149,9 @@ public sealed partial class MainWindow
         panelFadeTimer.Stop();
         if(!panelFading)return;
         Native.SetLayeredWindowAttributes(hwnd,0,255,2);
-        Native.SetWindowLongPtr(hwnd,-20,panelOriginalStyle);panelFading=false;
+        // Restore only the flag owned by this animation. Restoring an entire old
+        // style snapshot can undo a later presenter/topmost change.
+        long current=(long)Native.GetWindowLongPtr(hwnd,-20);
+        Native.SetWindowLongPtr(hwnd,-20,(nint)((current&~0x80000L)|((long)panelOriginalStyle&0x80000L)));panelFading=false;
     }
 }
