@@ -209,3 +209,20 @@ RF/DE feed0.7.6 byte SHA совпали; range начала/конца/попе�
 Клиент0.7.7 переведён на RF feed→DE только при network/HTTP/deadline; validnull/revoke/badJSON/schema/hash не ищут альтернативную политику. Package-probes RF/DE, первый успешный sample отменяет остальные; legacyGH только последний резерв. Shared exactHTTPS/filename/versionallowlist у Parse и Pending; VDS noRedirect. Дата/хеш/докачка/откат сохраняются. Предварительный общий build409casesPASS до последнего race-regression.
 
 Publisher приватного GitHub получает metadata локальнымgh и временные подписанныеassetссылки; GitHubtoken не передаётся VDS. Проверены3реальныеsignedredirects без вывода/сохранения, RF mirror CheckOnly0.7.6 PASS. Новый атомарный OriginFeed publisher с receipts, fullhash referencedEXE и закрытымbackup. 11Pythonfixtures PASS Windows иLinux, RF Origin CheckOnly byte-match/packages3 PASS. CI/releasegate включаютorigin+privateproducerfixtures. Подробнее docs/MIRROR.md. Выпуск0.7.7 пока НЕ опубликован, current feed/D остаются0.7.6 до полногоgate и публикации.
+
+## 0.7.7 опубликована, новый реальный клиент RF/DE проверен
+
+Выпуск https://github.com/gromit7/ClipShot/releases/tag/v0.7.7 опубликован из da71fca45a09e44b1306f9c3a0df39873cb2cf59. CI40271061698 success. Финальный full Release exit0,26/26 стадий,410unit,137UI,8тем,capture/editor,producer/private/origin/rollback/install/uninstall. Дополнительный UI-релизный сбой устранён: справка теперь проверяетVDS; native topmost синхронизируется SetWindowPos, завершение fade восстанавливает только свой layered flag, а не весь старый extendedstyle. Старая версия0.7.7 не заменялась: ошибки исправлены ДО публикации.
+
+Публикация GitHub→RF packages→atomicRFfeed→legacyGHfeed(d663780)→D успешно завершена. Оба HTTPS feed byte-identical/no-store и latest/recoverymetadata v0.7.7; Range всехтрёхпакетов RF/DE совпал. НаD ровно2versionedOSinstaller, хеширавнылокальным/официальным. GitHubпо-прежнемуPUBLIC, закрытиеждётподтвержденияпереходатестеров.
+
+Реальная отдельнаяconsole-проверка productionклассов (неfakehandler, безустановки/БД/буфера): CheckAsync current0.7.6 получил0.7.7 за11.05с черезRFdeadline→DE; DownloadAsync получил88268804байт за50.75с, SHA совпалслокальным/официальным. DEaccesslog подтвердил ClipShot/1.0 probe206(65536bytes) иfullGET200(88268804bytes); адресаклиентовневыводились. Записи work/relay-client-proof.log, helper work/relay-client-probe, release log work/relay-077-release-final.log. Это проверка сетевогоядра, неутверждениеобустановленнойверсииосновногоприложения.
+
+Пакеты0.7.7:
+- legacy88286769bytes SHA256616ccd36da1e8efeb81749ce9eea04c106dda8aeb0b59462c4a58606355c2e0a;
+- Win10 88253770bytes SHA2565c9834685d5c1a81ebabc667c4b0f7d8fea2e7f8818d59fd8248e6e53d07bfe5;
+- Win11 88268804bytes SHA256ec8f9817efa3f3bfae707b785e9ff57f60954df0937f8557d63d2305dbb725e6.
+
+Прямые адреса: https://tg.data-clouds.ru/clipshot/v0.7.7/ClipShot-Setup-0.7.7.exe (универсальный), вариантыWin10/Win11наобоихbot.data-clouds.ru/clipshot/ иtg.data-clouds.ru/clipshot/. GitHubuploadбылмедленным; попытка временногоSSH/SOCKSускоренияотклоненаautomaticreview, команда не исполнялась. Публикация благополучнозавершенаобычнымсоединением, сетевые настройкинеизменены.
+
+Следующие пожелания пользователя: hoverleave collapse Today/Templates, screenshot самойпанели, длинный списокнавсюWorkArea(без560pxcap). Это следующая разработка; не изменять опубликованный0.7.7/tag/artifacts.
