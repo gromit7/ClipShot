@@ -40,6 +40,12 @@ public sealed partial class MainWindow
             await UpdateTemplatePointerDrag(new Native.Point{X=start.X+2,Y=start.Y+2},true);
             Check(!templateDragInProgress&&!SuppressTemplateTap(),"movement below six physical pixels preserves ordinary click behavior");
             await UpdateTemplatePointerDrag(start,false);
+            string beforeCoalesced=JsonSerializer.Serialize(store.GetTemplateLayout());
+            BeginTemplatePointerDrag(source,keyA,start);
+            bool askedCoalesced=false;
+            bool coalesced=await UpdateTemplatePointerDrag(finish,false,()=>{askedCoalesced=true;return Task.FromResult<string?>(null);});
+            Check(askedCoalesced&&!coalesced&&!templateDragInProgress&&SuppressTemplateTap()&&beforeCoalesced==JsonSerializer.Serialize(store.GetTemplateLayout()),"a release containing coalesced movement reaches the folder prompt without needing a moved event or hardware button state");
+            await Settle();source=visible.Single(item=>item.Clip.Id==a).Row;target=visible.Single(item=>item.Clip.Id==b).Row;
             string beforeOutside=JsonSerializer.Serialize(store.GetTemplateLayout());
             BeginTemplatePointerDrag(source,keyA,start);
             var outside=new Native.Point{X=-100000,Y=-100000};await UpdateTemplatePointerDrag(outside,true);

@@ -15,6 +15,7 @@ public sealed partial class MainWindow
     private Pointer? templatePointer;
     private Native.Point templatePointerStart;
     private string? templatePointerSource;
+    private long templatePointerEventAt;
     private bool IsTemplateDragRow(Border row)=>templateDragRows.ContainsKey(row);
 
     private void RegisterTemplatePointerRow(Border row,string key,Border marker)
@@ -25,22 +26,33 @@ public sealed partial class MainWindow
             templatePointerTimerReady=true;
             templatePointerTimer.Tick+=async(_,_)=>
             {
+                // Queued routed events carry their historical button/position.
+                // Give them priority over already advanced hardware state.
+                if(Environment.TickCount64-templatePointerEventAt<80)return;
                 if(!Native.GetCursorPos(out var point)){EndTemplateDrag();return;}
                 await UpdateTemplatePointerDrag(point,WindowPrimaryButtonDown());
             };
         }
         row.AddHandler(UIElement.PointerPressedEvent,new PointerEventHandler((_,args)=>
         {
-            if(args.Pointer.PointerDeviceType!=PointerDeviceType.Mouse||!WindowPrimaryButtonDown()||
-                key[0]=='c'&&IsButtonSource(args.OriginalSource)||!Native.GetCursorPos(out var point))return;
+            if(args.Pointer.PointerDeviceType!=PointerDeviceType.Mouse||!args.GetCurrentPoint(row).Properties.IsLeftButtonPressed||
+                key[0]=='c'&&IsButtonSource(args.OriginalSource)||!TryTemplateEventPoint(row,args,out var point))return;
             BeginTemplatePointerDrag(row,key,point,args.Pointer);
+        }),true);
+        row.AddHandler(UIElement.PointerMovedEvent,new PointerEventHandler(async(_,args)=>
+        {
+            if(templatePointerRow is null||templatePointer is not null&&args.Pointer.PointerId!=templatePointer.PointerId||!TryTemplateEventPoint(row,args,out var point))return;
+            templatePointerEventAt=Environment.TickCount64;
+            await UpdateTemplatePointerDrag(point,args.GetCurrentPoint(row).Properties.IsLeftButtonPressed);
+            if(templateDragInProgress)args.Handled=true;
         }),true);
         row.AddHandler(UIElement.PointerReleasedEvent,new PointerEventHandler(async(_,args)=>
         {
-            if(!ReferenceEquals(templatePointerRow,row))return;
+            if(templatePointerRow is null||templatePointer is not null&&args.Pointer.PointerId!=templatePointer.PointerId)return;
+            templatePointerEventAt=Environment.TickCount64;
             bool dragging=templateDragInProgress;
-            if(Native.GetCursorPos(out var point))await UpdateTemplatePointerDrag(point,false);else EndTemplateDrag();
-            if(dragging)args.Handled=true;
+            if(TryTemplateEventPoint(row,args,out var point))await UpdateTemplatePointerDrag(point,false);else EndTemplateDrag();
+            if(dragging||SuppressTemplateTap())args.Handled=true;
         }),true);
         row.AddHandler(UIElement.PointerCanceledEvent,new PointerEventHandler((_,_)=>
         {if(ReferenceEquals(templatePointerRow,row))EndTemplateDrag();}),true);
@@ -62,8 +74,22 @@ public sealed partial class MainWindow
             !templateDragRows.TryGetValue(row,out var entry)||entry.Key!=key||!IsTemplateEntryKey(key))return false;
         StopTemplatePointerTracking();
         templatePointerRow=row;templatePointerSource=key;templatePointerStart=point;templatePointer=pointer;
-        if(pointer is not null)templatePointerTimer.Start();
+        templatePointerEventAt=Environment.TickCount64;
+        if(pointer is not null)
+        {
+            // Plain clip rows have no Button to retain the press. Capturing them
+            // now also delivers a coalesced release after a very short gesture.
+            if(key[0]=='c')row.CapturePointer(pointer);
+            templatePointerTimer.Start();
+        }
         return true;
+    }
+
+    private bool TryTemplateEventPoint(Border row,PointerRoutedEventArgs args,out Native.Point point)
+    {
+        point=default;if(!TryTemplatePointerArea(row,out var raw,out _))return false;
+        var p=args.GetCurrentPoint(row).Position;double scale=Root.XamlRoot?.RasterizationScale??1;
+        point=new(){X=(int)Math.Round(raw.Left+p.X*scale),Y=(int)Math.Round(raw.Top+p.Y*scale)};return true;
     }
 
     private async Task<bool> UpdateTemplatePointerDrag(Native.Point point,bool primaryDown,Func<Task<string?>>? nameProvider=null)
@@ -77,9 +103,10 @@ public sealed partial class MainWindow
         {
             // A click remains a normal click; only six physical pixels of actual
             // movement claim the gesture and suppress subsequent taps.
-            if(!primaryDown){StopTemplatePointerTracking();return false;}
-            if(dx*dx+dy*dy<36)return false;
-            if(templatePointer is not null&&!row.CapturePointer(templatePointer)){StopTemplatePointerTracking();return false;}
+            if(dx*dx+dy*dy<36){if(!primaryDown)StopTemplatePointerTracking();return false;}
+            // A queued release can contain the first delivered movement. It is
+            // still a real drag, but there is no down pointer left to capture.
+            if(primaryDown&&templatePointer is not null)row.CapturePointer(templatePointer);
             templateDragInProgress=true;templateDraggedEntry=source;templateTapSuppressedUntil=long.MaxValue;
             hoverTimer.Stop();leaveTimer.Stop();hovered=null;preview.IsOpen=false;CancelSectionHover();CancelPanelFade();
         }

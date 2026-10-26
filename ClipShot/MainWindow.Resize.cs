@@ -15,6 +15,7 @@ public sealed partial class MainWindow
     private SizeInt32 windowGestureSize;
     private readonly DispatcherTimer windowGestureTimer=new(){Interval=TimeSpan.FromMilliseconds(16)};
     private bool windowGestureReady;
+    private long windowGestureEventAt;
     private bool CanStartWindowPointerGesture=>!exiting&&!dialogOpen&&!takingScreenshot&&!windowResizing&&editor is null&&openMenus==0&&AppWindow.IsVisible;
     private static bool WindowPrimaryButtonDown()=>(Native.GetAsyncKeyState(Native.GetSystemMetrics(23)==0?1:2)&0x8000)!=0;
 
@@ -34,7 +35,7 @@ public sealed partial class MainWindow
     private void TryStartWindowPointerGesture(WindowPointerGesture gesture,PointerRoutedEventArgs e)
     {
         if(!CanStartWindowPointerGesture||e.Pointer.PointerDeviceType!=Microsoft.UI.Input.PointerDeviceType.Mouse||
-            !e.GetCurrentPoint(Root).Properties.IsLeftButtonPressed||!WindowPrimaryButtonDown()||!Native.GetCursorPos(out var mouse))return;
+            !e.GetCurrentPoint(Root).Properties.IsLeftButtonPressed||!TryWindowEventPoint(e,out var mouse))return;
         CancelPanelFade();
         if(!Root.CapturePointer(e.Pointer))return;
         e.Handled=true;BeginWindowPointerGesture(gesture,mouse,e.Pointer.PointerId,e.Pointer);
@@ -45,6 +46,7 @@ public sealed partial class MainWindow
         // системная move/size-петля может пережить исходный отпуск кнопки.
         windowPointerGesture=gesture;windowGesturePointer=pointer;windowGesturePointerId=pointerId;
         windowGestureMouse=mouse;windowGesturePosition=AppWindow.Position;windowGestureSize=AppWindow.Size;
+        windowGestureEventAt=Environment.TickCount64;
         // A deliberate move may detach the collapsed panel until a category
         // is expanded and collapsed again; automatic docking must not fight it.
         if(gesture==WindowPointerGesture.Move&&AllSectionsCollapsed)preserveCollapsedPosition=true;
@@ -56,6 +58,7 @@ public sealed partial class MainWindow
     {
         if(windowPointerGesture==WindowPointerGesture.None){windowGestureTimer.Stop();return;}
         if(exiting||dialogOpen||takingScreenshot||!AppWindow.IsVisible||!Native.GetCursorPos(out var mouse)){EndWindowPointerGesture();return;}
+        if(Environment.TickCount64-windowGestureEventAt<80)return;
         // Watchdog завершает жест даже при потерянном PointerReleased вне окна.
         UpdateWindowPointerGesture(mouse,WindowPrimaryButtonDown());
     }
@@ -75,9 +78,23 @@ public sealed partial class MainWindow
     private void WindowPointerMoved(object sender,PointerRoutedEventArgs e)
     {
         if(windowPointerGesture==WindowPointerGesture.None||e.Pointer.PointerId!=windowGesturePointerId)return;
-        if(!e.GetCurrentPoint(Root).Properties.IsLeftButtonPressed)EndWindowPointerGesture(e.Pointer.PointerId);
-        else PollWindowPointerGesture();
+        windowGestureEventAt=Environment.TickCount64;
+        if(TryWindowEventPoint(e,out var point))UpdateWindowPointerGesture(point,e.GetCurrentPoint(Root).Properties.IsLeftButtonPressed);
+        else EndWindowPointerGesture(e.Pointer.PointerId);
         e.Handled=true;
+    }
+    private bool TryWindowEventPoint(PointerRoutedEventArgs e,out Native.Point point)
+    {
+        point=new Native.Point();if(!Native.ClientToScreen(hwnd,ref point))return false;
+        var local=e.GetCurrentPoint(Root).Position;double scale=Root.XamlRoot?.RasterizationScale??1;
+        point.X+=(int)Math.Round(local.X*scale);point.Y+=(int)Math.Round(local.Y*scale);return true;
+    }
+    private void WindowPointerReleased(object sender,PointerRoutedEventArgs e)
+    {
+        if(windowPointerGesture!=WindowPointerGesture.None&&e.Pointer.PointerId==windowGesturePointerId&&
+            TryWindowEventPoint(e,out var point))
+            UpdateWindowPointerGesture(point,true);
+        EndWindowPointerGesture(e.Pointer.PointerId);
     }
     private void WindowPointerEnded(object sender,PointerRoutedEventArgs e)=>EndWindowPointerGesture(e.Pointer.PointerId);
     private void EndWindowPointerGesture(uint? pointerId=null)

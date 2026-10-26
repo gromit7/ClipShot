@@ -78,7 +78,7 @@ public sealed partial class MainWindow : Window
         Root.AddHandler(UIElement.KeyDownEvent,new KeyEventHandler(RootKeyDown),true);
         Root.PointerPressed+=DragEmptySpace;
         Root.AddHandler(UIElement.PointerMovedEvent,new PointerEventHandler(WindowPointerMoved),true);
-        Root.AddHandler(UIElement.PointerReleasedEvent,new PointerEventHandler(WindowPointerEnded),true);
+        Root.AddHandler(UIElement.PointerReleasedEvent,new PointerEventHandler(WindowPointerReleased),true);
         Root.AddHandler(UIElement.PointerCanceledEvent,new PointerEventHandler(WindowPointerEnded),true);
         Root.AddHandler(UIElement.PointerCaptureLostEvent,new PointerEventHandler(WindowPointerEnded),true);
         Activated+=(_,e)=>{if(e.WindowActivationState==WindowActivationState.Deactivated)EndWindowPointerGesture();};
