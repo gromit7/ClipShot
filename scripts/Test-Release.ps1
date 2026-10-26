@@ -126,7 +126,8 @@ try{
                 }finally{$env:CLIPSHOT_TEST_ROOT=$savedRoot}
             }
             Step 'Released 0.7.4 updater migration from App working directory' {
-                & (Join-Path "$PSScriptRoot" 'Test-LegacyUpdaterBridge.ps1') -Setup $win11.Path -Publication $publication -NestedActualApp
+                $migrationSetup=($wrappers | Where-Object Flavor -eq 'win11').Path
+                & (Join-Path $PSScriptRoot 'Test-LegacyUpdaterBridge.ps1') -Setup $migrationSetup -Publication $publication -NestedActualApp
             }
             Step 'Transactional install, locked DLL and verification rollback' {
                 $transactionRoot=Join-Path ([IO.Path]::GetTempPath()) ('ClipShot.Tests/'+[guid]::NewGuid().ToString('N'))
