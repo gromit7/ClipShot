@@ -11,6 +11,13 @@ public class PendingUpdateTests
         return(root,file,new(Version.Parse(version),new($"https://github.com/gromit7/ClipShot/releases/download/v{version}/ClipShot-Setup-{version}.exe"),bytes.Length,Convert.ToHexString(SHA256.HashData(bytes)),rollback));
     }
     [Fact]public void VerifiedPackageSurvivesSerializationAndRestart(){var p=Package();var saved=new PendingPackage(p.File,p.Update);Assert.Equal(saved,PendingUpdate.Read(JsonSerializer.Serialize(saved),p.Root,new(0,7,3,0)));}
+    [Theory][InlineData("bot.data-clouds.ru")][InlineData("tg.data-clouds.ru")]
+    public void VerifiedOriginOrRelayPackageSurvivesRestart(string host)
+    {
+        var p=Package();var update=p.Update with{Download=new($"https://{host}/clipshot/v0.7.9/ClipShot-Setup-0.7.9.exe")};var saved=new PendingPackage(p.File,update);
+        Assert.Equal(saved,PendingUpdate.Read(JsonSerializer.Serialize(saved),p.Root,new(0,7,3)));
+        Assert.Throws<InvalidDataException>(()=>PendingUpdate.Read(JsonSerializer.Serialize(saved with{Update=update with{Download=new(update.Download.AbsoluteUri+"?changed=1")}}),p.Root,new(0,7,3)));
+    }
     [Fact]public void AlreadyInstalledPackageIsCleared(){var p=Package();Assert.Null(PendingUpdate.Read(JsonSerializer.Serialize(new PendingPackage(p.File,p.Update)),p.Root,new(0,7,9,0)));}
     [Fact]public void NormalOlderPackageNeverDowngrades(){var p=Package();Assert.Null(PendingUpdate.Read(JsonSerializer.Serialize(new PendingPackage(p.File,p.Update)),p.Root,new(0,8,0)));}
     [Fact]public void CachedRollbackNeedsFreshPolicy(){var p=Package("0.7.2",true);Assert.Null(PendingUpdate.Read(JsonSerializer.Serialize(new PendingPackage(p.File,p.Update)),p.Root,new(0,7,0)));}

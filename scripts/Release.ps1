@@ -8,6 +8,8 @@ $project=[xml](Get-Content -LiteralPath (Join-Path $repo 'ClipShot/ClipShot.cspr
 $version=[string]$project.Project.PropertyGroup.Version
 $tag="v$version"
 $repository='gromit7/ClipShot'
+$repositoryInfo=GitHub -Arguments @('repo','view',$repository,'--json','visibility') | ConvertFrom-Json
+$privateRepository=$repositoryInfo.visibility -eq 'PRIVATE'
 if(-not $env:CLIPSHOT_MIRROR_EXECUTOR -or -not(Test-Path -LiteralPath $env:CLIPSHOT_MIRROR_EXECUTOR -PathType Leaf)){
     throw 'Для выпуска настройте CLIPSHOT_MIRROR_EXECUTOR: приватный исполнитель публикации российского зеркала.'
 }
@@ -58,6 +60,6 @@ Confirm-Packages $latest $setups
 # Ленту переключаем только после проверки российского зеркала. При ошибке
 # опубликованный GitHub-пакет сохраняется; продолжение выполняется штатным publisher.
 & (Join-Path $PSScriptRoot 'Publish-Mirror.ps1') -Version $version
-& (Join-Path $PSScriptRoot 'Publish-UpdateFeed.ps1') -ExpectedVersion $version -Publish
+& (Join-Path $PSScriptRoot 'Publish-UpdateFeed.ps1') -ExpectedVersion $version -Publish -PrivateRepository:$privateRepository
 & (Join-Path $PSScriptRoot 'Publish-Installer.ps1') -Setup $setup
 Write-Output "Выпущен ClipShot ${version}: GitHub и зеркало содержат три проверенных пакета; лента выбирает Windows 10/11, на D сохранены два явных установщика."

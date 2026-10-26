@@ -22,8 +22,7 @@ public static class PendingUpdate
         if(!UpdatePackages.TryParseName(name,out _,out string flavor)||!UpdatePackages.Supports(flavor,osBuild??Environment.OSVersion.Version.Build))throw new InvalidDataException("Package does not support this Windows build");
         string root=Path.GetFullPath(updatesRoot)+Path.DirectorySeparatorChar;
         string path=Path.GetFullPath(pending.FilePath);
-        string url=$"https://github.com/gromit7/ClipShot/releases/download/v{version}/{name}";
-        if(!Regex.IsMatch(version,@"^\d+\.\d+\.\d+$")||update.Version<new Version(0,7,0)||update.Download?.AbsoluteUri!=url||
+        if(!Regex.IsMatch(version,@"^\d+\.\d+\.\d+$")||update.Version<new Version(0,7,0)||!UpdateProtocol.IsAllowedLocation(update.Version,name,update.Download)||
             !path.StartsWith(root,StringComparison.OrdinalIgnoreCase)||Path.GetFileName(path)!=name||
             update.Bytes is <1024 or >262144000||!Regex.IsMatch(update.Sha256??"",@"^[a-fA-F0-9]{64}$")||!UpdateProtocol.Verify(path,update))throw new InvalidDataException();
         return pending;

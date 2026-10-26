@@ -5,7 +5,8 @@ namespace ClipShot;
 public static class UpdateFeed
 {
     public const int MaximumBytes=32*1024;
-    public const string Url="https://raw.githubusercontent.com/gromit7/ClipShot/main/update-feed.json";
+    public const string Url="https://bot.data-clouds.ru/clipshot/update-feed.json";
+    public const string FallbackUrl="https://tg.data-clouds.ru/clipshot/update-feed.json";
 
     // Один документ связывает стабильный выпуск и аварийный откат. Установка всё равно
     // доверяет только проверенному адресу установщика, его размеру и SHA-256.
@@ -29,8 +30,8 @@ public static class UpdateFeed
                 return candidate with{IsRollback=true,Reason=policy.Reason};
             }
         }
-        // stable:null отзывает предложение целиком. При сетевой ошибке или отзыве
-        // не обращаемся к другой ленте: это могло бы снова предложить плохую версию.
+        // stable:null отзывает предложение целиком. Содержимое успешного ответа
+        // авторитетно: отзыв, ошибка JSON/schema или политики не разрешают fallback.
         if(stable.ValueKind==JsonValueKind.Null)return null;
         if(stable.ValueKind!=JsonValueKind.Object)throw new InvalidDataException("Invalid stable release");
         return ParseRelease(root,"stable",current,flavor,build);

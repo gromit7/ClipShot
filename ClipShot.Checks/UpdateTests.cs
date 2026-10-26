@@ -19,6 +19,18 @@ public class UpdateTests
     [Theory][InlineData("0.7.0")][InlineData("0.6.2")]public void SameOrOlderVersionNeverInstalls(string version)=>Assert.Null(UpdateProtocol.Parse(Feed(version),new Version(0,7,0,0)));
     [Theory][InlineData("https://evil.test/setup.exe")][InlineData("http://github.com/gromit7/ClipShot/releases/download/v9.0.0/ClipShot-Setup-9.0.0.exe")][InlineData("https://github.com/other/ClipShot/releases/download/v9.0.0/ClipShot-Setup-9.0.0.exe")][InlineData("https://github.com:444/gromit7/ClipShot/releases/download/v9.0.0/ClipShot-Setup-9.0.0.exe")][InlineData("https://github.com/gromit7/ClipShot/releases/download/v9.0.0/ClipShot-Setup-9.0.0.exe#changed")]
     public void ForeignDownloadLocationIsRejected(string url)=>Assert.Throws<InvalidDataException>(()=>UpdateProtocol.Parse(Feed(url:url),new Version(0,7,0)));
+    [Theory][InlineData("bot.data-clouds.ru")][InlineData("tg.data-clouds.ru")]
+    public void ExactTrustedOriginAndRelayPackageUrlsAreAccepted(string host)
+        =>Assert.Equal(host,UpdateProtocol.Parse(Feed(url:$"https://{host}/clipshot/v9.0.0/ClipShot-Setup-9.0.0.exe"),new(0,7,0))!.Download.Host);
+    [Theory][InlineData("http://bot.data-clouds.ru/clipshot/v9.0.0/ClipShot-Setup-9.0.0.exe")]
+    [InlineData("https://bot.data-clouds.ru:444/clipshot/v9.0.0/ClipShot-Setup-9.0.0.exe")]
+    [InlineData("https://user@tg.data-clouds.ru/clipshot/v9.0.0/ClipShot-Setup-9.0.0.exe")]
+    [InlineData("https://tg.data-clouds.ru/clipshot/v8.0.0/ClipShot-Setup-9.0.0.exe")]
+    [InlineData("https://bot.data-clouds.ru/clipshot/v9.0.0/ClipShot-Win10-Setup-9.0.0.exe")]
+    [InlineData("https://bot.data-clouds.ru/clipshot/v9.0.0/ClipShot-Setup-9.0.0.exe?changed=1")]
+    [InlineData("https://tg.data-clouds.ru/clipshot/v9.0.0/ClipShot-Setup-9.0.0.exe#changed")]
+    [InlineData("https://other.data-clouds.ru/clipshot/v9.0.0/ClipShot-Setup-9.0.0.exe")]
+    public void TrustedHostDoesNotBypassExactPackageLocation(string url)=>Assert.Throws<InvalidDataException>(()=>UpdateProtocol.Parse(Feed(url:url),new(0,7,0)));
     [Theory][InlineData("md5:abc")][InlineData("sha256:abc")][InlineData("sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")]
     public void MissingOrInvalidDigestIsRejected(string digest)=>Assert.Throws<InvalidDataException>(()=>UpdateProtocol.Parse(Feed(digest:digest),new Version(0,7,0)));
     [Theory][InlineData(0)][InlineData(999999999)]public void UnreasonablePackageSizeIsRejected(long size)=>Assert.Throws<InvalidDataException>(()=>UpdateProtocol.Parse(Feed(size:size),new Version(0,7,0)));
@@ -81,12 +93,54 @@ public class UpdateTests
     public async Task FeedHttpFailureNeverFallsBackToReleaseApi(HttpStatusCode status)
     {
         var handler=new FeedHandler(Document(Feed()),status);using var client=new GitHubUpdates(handler);
-        await Assert.ThrowsAsync<HttpRequestException>(()=>client.CheckAsync(new Version(0,7,0),CancellationToken.None));AssertSingleFeedRequest(handler);
+        await Assert.ThrowsAsync<HttpRequestException>(()=>client.CheckAsync(new Version(0,7,0),CancellationToken.None));Assert.Equal(new[]{UpdateFeed.Url,UpdateFeed.FallbackUrl},handler.Requests);
     }
     [Fact]public async Task InvalidFeedNeverFallsBackToReleaseApi()
     {
         var handler=new FeedHandler("not json");using var client=new GitHubUpdates(handler);
         await Assert.ThrowsAnyAsync<JsonException>(()=>client.CheckAsync(new Version(0,7,0),CancellationToken.None));AssertSingleFeedRequest(handler);
+    }
+    private sealed class RoutedFeedHandler(Func<HttpRequestMessage,CancellationToken,Task<HttpResponseMessage>> respond):HttpMessageHandler
+    {
+        internal readonly List<string> Requests=[];
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken token)
+        {
+            Assert.Equal(HttpMethod.Get,request.Method);Assert.True(request.Headers.CacheControl?.NoCache);Requests.Add(request.RequestUri!.AbsoluteUri);return respond(request,token);
+        }
+    }
+    [Theory][InlineData(false)][InlineData(true)]
+    public async Task RfTransportErrorOrTimeoutUsesFreshDeDeadline(bool timeout)
+    {
+        var handler=new RoutedFeedHandler(async(request,token)=>
+        {
+            if(request.RequestUri!.AbsoluteUri==UpdateFeed.Url){if(timeout)await Task.Delay(Timeout.Infinite,token);throw new HttpRequestException("synthetic unavailable origin");}
+            return new(HttpStatusCode.OK){Content=new StringContent(Document(Feed()))};
+        });
+        using var client=new GitHubUpdates(handler){FeedAttemptTimeout=TimeSpan.FromMilliseconds(50)};
+        Assert.Equal(new Version(9,0,0),(await client.CheckAsync(new(0,7,0),TestContext.Current.CancellationToken))!.Version);
+        Assert.Equal(new[]{UpdateFeed.Url,UpdateFeed.FallbackUrl},handler.Requests);
+    }
+    [Theory][InlineData(HttpStatusCode.NotFound)][InlineData(HttpStatusCode.ServiceUnavailable)][InlineData(HttpStatusCode.Redirect)]
+    public async Task RfHttpErrorUsesDeFeedWithoutGithubRequests(HttpStatusCode status)
+    {
+        var handler=new RoutedFeedHandler((request,_)=>Task.FromResult(new HttpResponseMessage(request.RequestUri!.AbsoluteUri==UpdateFeed.Url?status:HttpStatusCode.OK){Content=new StringContent(Document(Feed()))}));
+        using var client=new GitHubUpdates(handler);Assert.NotNull(await client.CheckAsync(new(0,7,0),TestContext.Current.CancellationToken));
+        Assert.Equal(new[]{UpdateFeed.Url,UpdateFeed.FallbackUrl},handler.Requests);
+    }
+    [Theory][InlineData(false)][InlineData(true)]
+    public async Task SuccessfulRfResponseWithInvalidSchemaOrHashNeverUsesDe(bool badHash)
+    {
+        string json=badHash?Document(Feed(digest:"bad")):"{\"schema\":2,\"stable\":null,\"rollback\":null}";
+        var handler=new FeedHandler(json);using var client=new GitHubUpdates(handler);
+        await Assert.ThrowsAsync<InvalidDataException>(()=>client.CheckAsync(new(0,7,0),TestContext.Current.CancellationToken));AssertSingleFeedRequest(handler);
+    }
+    [Fact]public async Task CallerCancellationNeverStartsTheRelayRequest()
+    {
+        var entered=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler=new RoutedFeedHandler(async(_,token)=>{entered.TrySetResult();await Task.Delay(Timeout.Infinite,token);return new(HttpStatusCode.OK);});
+        using var client=new GitHubUpdates(handler);using var stop=CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var checking=client.CheckAsync(new(0,7,0),stop.Token);await entered.Task.WaitAsync(TimeSpan.FromSeconds(5),TestContext.Current.CancellationToken);stop.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>checking);Assert.Equal(UpdateFeed.Url,Assert.Single(handler.Requests));
     }
     [Fact]public void FeedRejectsUnknownSchema()=>Assert.Throws<InvalidDataException>(()=>UpdateFeed.Parse("{\"schema\":2,\"stable\":null,\"rollback\":null}",new(0,7,0)));
     [Fact]public void FeedNeverDowngradesWithoutMatchingPolicy()=>Assert.Null(UpdateFeed.Parse(Document(Feed("0.7.0")),new(0,8,0)));

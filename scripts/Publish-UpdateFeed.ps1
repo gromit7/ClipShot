@@ -1,4 +1,4 @@
-param([string]$ExpectedVersion,[switch]$Publish)
+param([string]$ExpectedVersion,[switch]$Publish,[string]$RemoteExecutorPath=$env:CLIPSHOT_MIRROR_EXECUTOR,[switch]$PrivateRepository)
 $ErrorActionPreference='Stop'
 $repo=Split-Path $PSScriptRoot
 function Read-Release([string]$Endpoint){
@@ -16,7 +16,7 @@ function Package-Release($Release,[string]$Flavor='legacy',[switch]$Optional){
     $asset=$assets[0]
     $url="https://github.com/gromit7/ClipShot/releases/download/v$version/$name"
     if($asset.state -ne 'uploaded' -or $asset.browser_download_url -cne $url -or $asset.digest -notmatch '^sha256:[0-9a-fA-F]{64}$' -or $asset.size -lt 1024 -or $asset.size -gt 262144000){throw "Неверные метаданные установщика $name."}
-    return [ordered]@{draft=$false;prerelease=$false;tag_name=$Release.tag_name;assets=@([ordered]@{name=$name;size=$asset.size;digest=$asset.digest;browser_download_url=$url})}
+    return [ordered]@{draft=$false;prerelease=$false;tag_name=$Release.tag_name;assets=@([ordered]@{name=$name;size=$asset.size;digest=$asset.digest;browser_download_url=$(if($PrivateRepository){"https://bot.data-clouds.ru/clipshot/v$version/$name"}else{$url})})}
 }
 function Variant-Releases($Release,[switch]$Optional){
     $win10=Package-Release $Release 'win10' -Optional:$Optional
@@ -49,11 +49,14 @@ $json=[ordered]@{schema=1;stable=$stable;rollback=$rollback;variants=$variants}|
 if([Text.Encoding]::UTF8.GetByteCount($json) -gt 32768){throw 'Лента превышает 32 КиБ.'}
 $path=Join-Path $repo 'update-feed.json';[IO.File]::WriteAllText($path,$json+"`n",[Text.UTF8Encoding]::new($false))
 if($Publish){
+    # RF is authoritative. Legacy GitHub feed remains until testers migrate.
+    & (Join-Path $PSScriptRoot 'Publish-OriginFeed.ps1') -FeedPath $path -RemoteExecutorPath $RemoteExecutorPath
     & git -C $repo add -- update-feed.json;if($LASTEXITCODE -ne 0){throw 'Не удалось подготовить ленту.'}
     & git -C $repo diff --cached --quiet -- update-feed.json
     if($LASTEXITCODE -eq 1){& git -C $repo commit -m ("Лента обновлений "+$stable.tag_name);if($LASTEXITCODE -ne 0){throw 'Не удалось сохранить ленту.'}}
     elseif($LASTEXITCODE -ne 0){throw 'Не удалось сравнить ленту.'}
     & git -C $repo push origin main;if($LASTEXITCODE -ne 0){throw 'Не удалось отправить ленту.'}
+    if(-not $PrivateRepository){
     $commit=(& git -C $repo rev-parse HEAD).Trim()
     $response=Invoke-WebRequest -Uri ("https://raw.githubusercontent.com/gromit7/ClipShot/main/update-feed.json?commit="+$commit) -Headers @{'Cache-Control'='no-cache'} -TimeoutSec 15
     $remote=$response.Content|ConvertFrom-Json
@@ -64,5 +67,6 @@ if($Publish){
         if($actual.tag_name -ne $expected.tag_name -or $actual.assets[0].name -cne $expected.assets[0].name -or $actual.assets[0].size -ne $expected.assets[0].size -or $actual.assets[0].digest -cne $expected.assets[0].digest -or $actual.assets[0].browser_download_url -cne $expected.assets[0].browser_download_url){throw "Публичная лента варианта $flavor не совпадает с опубликованным выпуском."}
     }
     if(($remote.rollback|ConvertTo-Json -Depth 12 -Compress) -cne ($local.rollback|ConvertTo-Json -Depth 12 -Compress)){throw 'Публичная политика отката не совпадает с проверенной.'}
+    }
 }
 Write-Output ("Лента обновлений (legacy, Windows 10, Windows 11): "+$stable.tag_name+", "+[Text.Encoding]::UTF8.GetByteCount($json)+" байт.")

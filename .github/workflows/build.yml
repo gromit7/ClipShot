@@ -26,6 +26,13 @@ jobs:
       - name: Лента, зеркало и пакеты Windows 10/11 на синтетических данных
         shell: pwsh
         run: ./scripts/Test-WindowsVariants.ps1
+      - name: Проверка origin и публикации закрытого репозитория
+        shell: pwsh
+        run: |
+          python ./scripts/Test-OriginFeed.py
+          if ($LASTEXITCODE -ne 0) { throw 'Origin feed fixtures failed' }
+          ./scripts/Test-PrivateMirrorProducer.ps1
+          ./scripts/Test-OriginFeedWrapper.ps1
       - name: Отчёты тестов
         if: always()
         uses: actions/upload-artifact@v4

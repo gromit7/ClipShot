@@ -30,3 +30,4 @@
 **/*.key
 **/*.log
 /ClipShot/uninstall-files.nsh
+**/__pycache__/

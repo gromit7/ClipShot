@@ -46,7 +46,10 @@ Text (Join-Path $feedRoot 'update-policy.json') ($policy|ConvertTo-Json)
 & (Join-Path $feedRoot 'scripts/Publish-UpdateFeed.ps1') -ExpectedVersion '9.8.7' | Out-Null
 $feed=Get-Content -LiteralPath (Join-Path $feedRoot 'update-feed.json') -Raw|ConvertFrom-Json
 Assert ($feed.schema -eq 1 -and $feed.stable.assets[0].name -eq 'ClipShot-Setup-9.8.7.exe') 'Legacy feed contract preserved'
-Assert ($feed.variants.win10.assets[0].name -eq 'ClipShot-Win10-Setup-9.8.7.exe' -and $feed.variants.win11.assets[0].name -eq 'ClipShot-Win11-Setup-9.8.7.exe') 'Feed variants use exact flavored filenames'
+Assert ($feed.variants.win10.assets[0].name -eq 'ClipShot-Win10-Setup-9.8.7.exe' -and $feed.variants.win11.assets[0].name -eq 'ClipShot-Win11-Setup-9.8.7.exe') 'Feed variants use exact flavored filenames'& (Join-Path $feedRoot 'scripts/Publish-UpdateFeed.ps1') -ExpectedVersion '9.8.7' -PrivateRepository | Out-Null
+$privateFeed=Get-Content -LiteralPath (Join-Path $feedRoot 'update-feed.json') -Raw|ConvertFrom-Json
+Assert ($privateFeed.stable.assets[0].browser_download_url -ceq 'https://bot.data-clouds.ru/clipshot/v9.8.7/ClipShot-Setup-9.8.7.exe' -and $privateFeed.variants.win11.assets[0].browser_download_url -ceq 'https://bot.data-clouds.ru/clipshot/v9.8.7/ClipShot-Win11-Setup-9.8.7.exe') 'Private repository feed uses public origin packages without GitHub auth'
+
 $policy.action='rollback';$policy.targetVersion='0.7.3';$policy.affectedVersions=@('9.8.7');$policy.reason='synthetic test'
 Text (Join-Path $feedRoot 'update-policy.json') ($policy|ConvertTo-Json)
 & (Join-Path $feedRoot 'scripts/Publish-UpdateFeed.ps1') -ExpectedVersion '9.8.7' | Out-Null

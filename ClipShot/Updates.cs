@@ -4,7 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 namespace ClipShot;
 public sealed record AppUpdate(Version Version,Uri Download,long Bytes,string Sha256,bool IsRollback=false,string Reason="",string PackageName="");
-// Имя пакета — часть проверенных метаданных GitHub, а не свободное имя файла.
+// Имя пакета — часть проверенных метаданных выпуска, а не свободное имя файла.
 // Legacy остаётся для клиентов 0.7.0–0.7.3; новые клиенты выбирают пакет по реальной сборке ОС.
 public static class UpdatePackages
 {
@@ -73,11 +73,21 @@ public static class UpdateProtocol
             long size=asset.GetProperty("size").GetInt64();string digest=asset.GetProperty("digest").GetString()??"";
             if(size<1024||size>MaximumBytes||!Regex.IsMatch(digest,@"^sha256:[0-9a-fA-F]{64}$"))throw new InvalidDataException("Invalid update metadata");
             var uri=new Uri(asset.GetProperty("browser_download_url").GetString()!);
-            string expected=$"/gromit7/ClipShot/releases/download/{tag}/{name}";
-            if(uri.Scheme!="https"||uri.Host!="github.com"||!uri.IsDefaultPort||uri.AbsolutePath!=expected||uri.Query.Length!=0||uri.Fragment.Length!=0||uri.UserInfo.Length!=0)throw new InvalidDataException("Unexpected update location");
+            if(!IsAllowedLocation(version,name,uri))throw new InvalidDataException("Unexpected update location");
             return new(version,uri,size,digest[7..].ToLowerInvariant(),PackageName:name);
         }
         return null;
+    }
+    public static bool IsAllowedLocation(Version version,string name,Uri? uri)
+    {
+        if(uri is null||!uri.IsAbsoluteUri||uri.Scheme!="https"||!uri.IsDefaultPort||uri.Query.Length!=0||uri.Fragment.Length!=0||uri.UserInfo.Length!=0||
+            !UpdatePackages.TryParseName(name,out var packageVersion,out _)||packageVersion!=version)return false;
+        return uri.Host switch
+        {
+            "bot.data-clouds.ru" or "tg.data-clouds.ru"=>uri.AbsolutePath==$"/clipshot/v{version}/{name}",
+            "github.com"=>uri.AbsolutePath==$"/gromit7/ClipShot/releases/download/v{version}/{name}",
+            _=>false
+        };
     }
     public static bool Verify(string path,AppUpdate update)
     {
@@ -88,33 +98,42 @@ public static class UpdateProtocol
 internal sealed class GitHubUpdates : IDisposable
 {
     private readonly HttpClient http;
+    private readonly HttpClient legacyHttp;
     private readonly HttpClient feedHttp;
     private readonly Uri[] mirrorRoots;
     internal GitHubUpdates(HttpMessageHandler? handler=null,IEnumerable<Uri>? mirrors=null)
     {
         mirrorRoots=(mirrors??UpdateSources.MirrorRoots).ToArray();
-        http=handler is null?new HttpClient():new HttpClient(handler);
+        http=handler is null?new HttpClient(new HttpClientHandler{AllowAutoRedirect=false}):new HttpClient(handler);
         http.Timeout=TimeSpan.FromMinutes(5);http.DefaultRequestHeaders.UserAgent.ParseAdd("ClipShot/1.0");
-        // Для ленты запрещены редиректы: одна проверка — ровно один GET без API/fallback.
-        // Загрузка установщика использует отдельный клиент, поскольку GitHub перенаправляет assets.
+        // Redirect разрешён только для переходного GitHub asset URL. RF/DE
+        // отдают package непосредственно и не могут увести запрос на чужой хост.
+        legacyHttp=handler is null?new HttpClient():new HttpClient(handler,disposeHandler:false);
+        legacyHttp.Timeout=TimeSpan.FromMinutes(5);legacyHttp.DefaultRequestHeaders.UserAgent.ParseAdd("ClipShot/1.0");
+        // Метаданные не следуют редиректам и не запрашивают GitHub. DE получает
+        // только transport/HTTP fallback, но не отменяет содержание ответа RF.
         feedHttp=handler is null?new HttpClient(new HttpClientHandler{AllowAutoRedirect=false}):new HttpClient(handler,disposeHandler:false);
-        feedHttp.Timeout=TimeSpan.FromSeconds(10);feedHttp.DefaultRequestHeaders.UserAgent.ParseAdd("ClipShot/1.0");feedHttp.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+        feedHttp.Timeout=Timeout.InfiniteTimeSpan;feedHttp.DefaultRequestHeaders.UserAgent.ParseAdd("ClipShot/1.0");feedHttp.DefaultRequestHeaders.Accept.ParseAdd("application/json");
         feedHttp.DefaultRequestHeaders.CacheControl=new(){NoCache=true};
     }
     internal async Task<AppUpdate?> CheckAsync(Version version,CancellationToken token,int? osBuild=null)
     {
-        using var timeout=CancellationTokenSource.CreateLinkedTokenSource(token);timeout.CancelAfter(TimeSpan.FromSeconds(10));
-        string json=await ReadFeed(timeout.Token);
+        string json;
+        try{json=await ReadFeed(UpdateFeed.Url,token);}
+        catch(Exception error)when(!token.IsCancellationRequested&&error is not InvalidDataException&&error is HttpRequestException or IOException or OperationCanceledException)
+        {json=await ReadFeed(UpdateFeed.FallbackUrl,token);}
         return UpdateFeed.Parse(json,version,osBuild);
     }
-    private async Task<string> ReadFeed(CancellationToken token)
+    internal TimeSpan FeedAttemptTimeout {get;set;}=TimeSpan.FromSeconds(10);
+    private async Task<string> ReadFeed(string endpoint,CancellationToken token)
     {
-        using var response=await feedHttp.GetAsync(UpdateFeed.Url,HttpCompletionOption.ResponseHeadersRead,token);
+        using var deadline=CancellationTokenSource.CreateLinkedTokenSource(token);deadline.CancelAfter(FeedAttemptTimeout);
+        using var response=await feedHttp.GetAsync(endpoint,HttpCompletionOption.ResponseHeadersRead,deadline.Token);
         response.EnsureSuccessStatusCode();
         if(response.Content.Headers.ContentLength is long length&&length>UpdateFeed.MaximumBytes)throw new InvalidDataException("Update feed is too large");
-        await using var input=await response.Content.ReadAsStreamAsync(token);using var bytes=new MemoryStream();var buffer=new byte[8192];int read;
-        while((read=await input.ReadAsync(buffer,token))>0){if(bytes.Length+read>UpdateFeed.MaximumBytes)throw new InvalidDataException("Update feed is too large");bytes.Write(buffer,0,read);}
-        return System.Text.Encoding.UTF8.GetString(bytes.ToArray());
+        await using var input=await response.Content.ReadAsStreamAsync(deadline.Token);using var bytes=new MemoryStream();var buffer=new byte[8192];int read;
+        while((read=await input.ReadAsync(buffer,deadline.Token))>0){if(bytes.Length+read>UpdateFeed.MaximumBytes)throw new InvalidDataException("Update feed is too large");bytes.Write(buffer,0,read);}
+        return new System.Text.UTF8Encoding(false,true).GetString(bytes.ToArray());
     }
     internal TimeSpan DownloadStallTimeout {get;set;}=TimeSpan.FromSeconds(30);
     internal TimeSpan DownloadRetryDelay {get;set;}=TimeSpan.FromSeconds(2);
@@ -130,10 +149,10 @@ internal sealed class GitHubUpdates : IDisposable
                 {
                     long offset=File.Exists(partial)?new FileInfo(partial).Length:0;
                     if(offset==update.Bytes&&UpdateProtocol.Verify(partial,update)){File.Move(partial,path,true);return;}
-                    using var request=new HttpRequestMessage(HttpMethod.Get,sources[attempt%sources.Count]);
+                    var source=sources[attempt%sources.Count];using var request=new HttpRequestMessage(HttpMethod.Get,source);
                     if(offset>0)request.Headers.Range=new System.Net.Http.Headers.RangeHeaderValue(offset,null);
                     using var headerTimeout=CancellationTokenSource.CreateLinkedTokenSource(token);headerTimeout.CancelAfter(DownloadStallTimeout);
-                    using var response=await http.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,headerTimeout.Token);
+                    using var response=await (source.Host=="github.com"?legacyHttp:http).SendAsync(request,HttpCompletionOption.ResponseHeadersRead,headerTimeout.Token);
                     headerTimeout.CancelAfter(Timeout.InfiniteTimeSpan);response.EnsureSuccessStatusCode();
                     if(response.StatusCode==System.Net.HttpStatusCode.PartialContent)
                     {
@@ -174,5 +193,5 @@ internal sealed class GitHubUpdates : IDisposable
         }
         finally{if(File.Exists(partial))File.Delete(partial);}
     }
-    public void Dispose(){feedHttp.Dispose();http.Dispose();}
+    public void Dispose(){feedHttp.Dispose();legacyHttp.Dispose();http.Dispose();}
 }

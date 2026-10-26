@@ -59,6 +59,14 @@ try{
     if($MakeNsis){
         if($SkipDesktop -and $PublishInstaller){throw 'Desktop and installer checks must pass before publishing an installer.'}
         Step 'Synthetic OS package publication contracts' {& (Join-Path $PSScriptRoot 'Test-WindowsVariants.ps1')}
+        Step 'Synthetic private mirror publication contracts' {& (Join-Path $PSScriptRoot 'Test-PrivateMirrorProducer.ps1')}
+        Step 'Synthetic origin feed receipt contracts' {& (Join-Path $PSScriptRoot 'Test-OriginFeedWrapper.ps1')}
+        Step 'Synthetic authoritative origin feed contracts' {
+            $fixturePython=$env:CLIPSHOT_PYTHON
+            if(-not $fixturePython){$fixturePython=(Get-Command python -ErrorAction Stop).Source}
+            & $fixturePython (Join-Path $PSScriptRoot 'Test-OriginFeed.py')
+            if($LASTEXITCODE -ne 0){throw 'Origin feed fixtures failed'}
+        }
         Step 'Compile versioned installer' {& (Join-Path $repo 'ClipShot/build-installer.ps1') -MakeNsis $MakeNsis -NoLatestCopy}
         $setup=Join-Path $repo "ClipShot-Setup-$version.exe"
         $wrappers=@(
