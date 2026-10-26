@@ -12,7 +12,7 @@ public sealed partial class MainWindow
     {
         void Check(bool ok,string name)=>results.Add($"{(ok?"PASS":"FAIL")} {name}");
         string folder=Path.Combine(dataFolder,"SyntheticClipdiary");Directory.CreateDirectory(folder);
-        string path=Path.Combine(folder,"snippets.sdb"),offer=store.Get("clipdiaryoffer","1"),days=store.Get("days","90");
+        string path=Path.Combine(folder,"snippets.sdb"),offer=store.Get("clipdiaryoffer","1"),days=store.Get("days","30");
         var ids=store.All().Select(c=>c.Id).ToHashSet();
         Task? task=null;
         try
@@ -40,6 +40,10 @@ public sealed partial class MainWindow
             task=ShowClipdiaryImport(folder);
             for(int i=0;i<50&&activeDialog?.IsLoaded!=true;i++)await Task.Delay(40);
             Check(dialogOpen&&activeDialog?.Title?.ToString()=="Импорт из Clipdiary"&&UpdateOperationBusy,"import opens a real dialog and protects it from automatic installation");
+            var form=(StackPanel)((ScrollViewer)activeDialog!.Content).Content;
+            var keep=form.Children.OfType<CheckBox>().Single(box=>box.Content?.ToString()=="Включить бессрочное хранение всей истории");
+            Check(keep.IsChecked==false,"import does not enable unlimited retention by default");
+            keep.IsChecked=true; // Explicit opt-in keeps the dated 2020 fixture.
             Button? Find(DependencyObject node)
             {
                 if(node is Button b&&b.Content?.ToString()=="Импортировать")return b;
@@ -58,7 +62,7 @@ public sealed partial class MainWindow
             var imported=store.All().SingleOrDefault(c=>!ids.Contains(c.Id)&&c.Template);
             Check(imported is {Template:true,Text:"Искусственный шаблон Clipdiary UI",Name:"Тест импорта"},"one click imports a complete synthetic snippet through the real dialog and worker store");
             var old=store.All().SingleOrDefault(c=>!ids.Contains(c.Id)&&!c.Template);
-            Check(old?.Seen==new DateTime(2020,1,15,14,25,36,DateTimeKind.Local)&&store.Get("days","90")=="0","real import preserves the original local history date and the explicit keep-all retention choice");
+            Check(old?.Seen==new DateTime(2020,1,15,14,25,36,DateTimeKind.Local)&&store.Get("days","30")=="0","real import preserves the original local history date and the explicit keep-all retention choice");
             Check(before.SequenceEqual(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path))),"real dialog import leaves the synthetic Clipdiary source unchanged");
             Check(!clipdiaryImportRunning&&store.Get("clipdiaryoffer","1")=="0","completed import suppresses further startup offers");
             activeDialog?.Hide();await task;

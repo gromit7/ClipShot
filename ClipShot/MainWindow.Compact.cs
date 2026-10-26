@@ -5,7 +5,7 @@ using Windows.Graphics;
 namespace ClipShot;
 public sealed partial class MainWindow
 {
-    private bool buildingTemplates,compactResizing;
+    private bool buildingTemplates,compactResizing,preserveCollapsedPosition;
     private int compactGroupCount=-1,openMenus;
     private readonly Dictionary<string,FrameworkElement> sectionHeadings=[];
     private readonly DispatcherTimer panelFadeTimer=new(){Interval=TimeSpan.FromMilliseconds(16)};
@@ -14,6 +14,20 @@ public sealed partial class MainWindow
     private nint panelOriginalStyle;
     private bool inlineSizingReady,inlineFitQueued,inlineFitting;
     private bool InlineLayout=>store.Get("sectionlayout","side")=="inline";
+    private bool AllSectionsCollapsed=>Search.Visibility==Visibility.Collapsed&&Search.Text.Trim().Length==0&&
+        (InlineLayout?!sectionHeadings.Keys.Any(title=>expanded.GetValueOrDefault(title)):sectionInitialized&&activeSection is null);
+    private void DockCollapsedPanel()
+    {
+        if(exiting||!AppWindow.IsVisible||dialogOpen||windowResizing||takingScreenshot||templateDragInProgress||editor is not null||preserveCollapsedPosition||!AllSectionsCollapsed)return;
+        var area=DisplayArea.Primary.WorkArea;
+        if(area.Width<=0||area.Height<=0)return;
+        int width=Math.Min(AppWindow.Size.Width,area.Width),height=Math.Min(AppWindow.Size.Height,area.Height);
+        int x=area.X+area.Width-width,y=area.Y+area.Height-height;
+        if(AppWindow.Position.X==x&&AppWindow.Position.Y==y&&AppWindow.Size.Width==width&&AppWindow.Size.Height==height)return;
+        compactResizing=true;
+        try{AppWindow.MoveAndResize(new RectInt32(x,y,width,height));}
+        finally{compactResizing=false;}
+    }
     private bool AlwaysOnTop=>store.Get("alwaysontop","0")=="1";
     private void ApplyAlwaysOnTop()
     {
@@ -46,7 +60,7 @@ public sealed partial class MainWindow
         compactGroupCount=count;
         if(store.Get("panelautofit","1")!="1")return;
         double scale=Math.Max(1,Native.GetDpiForWindow(hwnd)/96d);
-        int height=(int)(Math.Max(100,count*41+64)*scale);
+        int height=(int)(Math.Max(100,count*41+82)*scale);
         compactResizing=true;
         try{AppWindow.Resize(new SizeInt32(Math.Max(AppWindow.Size.Width,(int)(220*scale)),height));}
         finally{compactResizing=false;}
@@ -89,19 +103,21 @@ public sealed partial class MainWindow
             Root.InvalidateMeasure();
             if(!double.IsFinite(contentHeight))return;
             var bounds=InlinePanelPlacement.Choose(width,AppWindow.Position.Y,area.X,area.Y,area.Width,area.Height,contentHeight,scale,chromeHeight);
+            if(preserveCollapsedPosition&&AllSectionsCollapsed)
+                bounds=bounds with{X=Math.Clamp(AppWindow.Position.X,area.X,area.X+area.Width-bounds.Width)};
             if(AppWindow.Position.X==bounds.X&&AppWindow.Position.Y==bounds.Y&&AppWindow.Size.Width==bounds.Width&&AppWindow.Size.Height==bounds.Height)return;
             compactResizing=true;
             try{AppWindow.MoveAndResize(new RectInt32(bounds.X,bounds.Y,bounds.Width,bounds.Height));}
             finally{compactResizing=false;}
         }
-        finally{inlineFitting=false;}
+        finally{inlineFitting=false;DockCollapsedPanel();}
     }
     private void TrackMenu(MenuFlyout menu)
     {
         menu.Opened+=(_,_)=>{openMenus++;CancelPanelFade();};
         menu.Closed+=(_,_)=>openMenus=Math.Max(0,openMenus-1);
     }
-    private bool CanDismissPanel=>!exiting&&!AlwaysOnTop&&AppWindow.IsVisible&&!dialogOpen&&!takingScreenshot&&!windowResizing&&editor is null&&openMenus==0;
+    private bool CanDismissPanel=>!exiting&&!AlwaysOnTop&&AppWindow.IsVisible&&!dialogOpen&&!takingScreenshot&&!templateDragInProgress&&!windowResizing&&editor is null&&openMenus==0;
     private bool ExternalForeground()
     {
         nint foreground=Native.GetForegroundWindow();

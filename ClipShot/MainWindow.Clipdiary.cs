@@ -47,9 +47,9 @@ public sealed partial class MainWindow
         var source=new TextBox{Header=T("Папка данных Clipdiary"),Text=folder??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),"Clipdiary"),AcceptsReturn=false};
         var history=new CheckBox{Content=T("История: текст и изображения"),IsChecked=true};
         var templates=new CheckBox{Content=T("Шаблоны"),IsChecked=true};
-        var keep=new CheckBox{Content=T("Хранить всю импортированную историю без ограничения срока"),IsChecked=true};
+        var keep=new CheckBox{Content=T("Включить бессрочное хранение всей истории"),IsChecked=false};
         var never=new CheckBox{Content=T("Больше не предлагать при запуске"),Visibility=offered?Visibility.Visible:Visibility.Collapsed};
-        var detail=new TextBlock{Text=T("Исходные данные Clipdiary не изменяются. Повторный импорт не создаёт дубли. Неподдерживаемые записи будут пропущены."),TextWrapping=TextWrapping.Wrap};
+        var detail=new TextBlock{Text=T("Исходные данные Clipdiary не изменяются. Повторный импорт не создаёт дубли. Неподдерживаемые записи будут пропущены.")+" "+T("К истории применяется срок из настроек. Для сохранения старых клипов можно включить бессрочное хранение."),TextWrapping=TextWrapping.Wrap};
         var progress=new ProgressRing{IsActive=false,Visibility=Visibility.Collapsed,Width=28,Height=28};
         var panel=new StackPanel{Spacing=12};
         foreach(var element in new UIElement[]{detail,source,history,templates,keep,never,progress})panel.Children.Add(element);

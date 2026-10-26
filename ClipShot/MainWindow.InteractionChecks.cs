@@ -39,6 +39,7 @@ public sealed partial class MainWindow
             await RunSectionHoverChecks(results);
             await RunWindowDragChecks(results);
             await RunInlinePanelChecks(results);
+            await RunTemplateFolderChecks(results);
             var presenter=(Microsoft.UI.Windowing.OverlappedPresenter)AppWindow.Presenter;
             var pin=((Microsoft.UI.Xaml.Controls.MenuFlyout)Root.ContextFlyout).Items.OfType<Microsoft.UI.Xaml.Controls.ToggleMenuFlyoutItem>().Single(i=>Equals(i.Tag,"alwaysontop"));
             Check(!AlwaysOnTop&&!presenter.IsAlwaysOnTop&&!pin.IsChecked,"always-on-top is off by default in both saved preference and presenter");
@@ -145,7 +146,15 @@ public sealed partial class MainWindow
             ShowNearCursor();SettingsClick(this,new());await Task.Delay(200);await CheckUpdatesFromTray();
             Check(!dialogOpen&&activeDialog is null,"manual check closes settings without saving and isolated UI never accesses network");
             ShowNearCursor();TakeScreenshot();await Task.Delay(400);
-            Check(captureWindow is not null,"capture works after settings were minimized");captureWindow?.Cancel();await Task.Delay(150);
+            Check(captureWindow is not null&&AppWindow.IsVisible,"capture works after settings were minimized and keeps the visible ClipShot panel in the frame");captureWindow?.Cancel();await Task.Delay(150);
+            Hide();await Task.Delay(80);AppWindow.Show(false);await Task.Delay(80);
+            Check(AppWindow.IsVisible&&!OwnForeground(),"synthetic panel can remain visible without owning the foreground");
+            TakeScreenshot();await Task.Delay(400);
+            Check(captureWindow is not null&&AppWindow.IsVisible,"screenshot keeps a visible panel even when focus was in another application");captureWindow?.Cancel();await Task.Delay(150);
+            string captureLayout=store.Get("sectionlayout","side");store.Set("sectionlayout","side");activeSection="Сегодня";sectionInitialized=true;Render();ShowNearCursor();await Task.Delay(100);
+            TakeScreenshot();await Task.Delay(400);DismissSectionForExternalFocus(true);PollSectionAutoClose();await Task.Delay(240);
+            Check(captureWindow is not null&&AppWindow.IsVisible&&sectionPopup.IsOpen&&activeSection=="Сегодня"&&!panelFading,"own area capture preserves both the main panel and expanded side clips despite focus and pointer leaving them");
+            captureWindow?.Cancel();await Task.Delay(150);store.Set("sectionlayout",captureLayout);Render();
             store.Add("text","Настройки");Render();long untranslated=store.All().First(c=>c.Text=="Настройки").Id;
             store.Set("language","en");ApplyLanguage();Render();
             Check(Search.PlaceholderText.Length==0&&Microsoft.UI.Xaml.Controls.ToolTipService.GetToolTip(Search)?.ToString()=="Search history"&&SelectHint.Text=="Select","English tooltip is applied while search stays unlabelled");

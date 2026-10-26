@@ -90,7 +90,7 @@ public sealed partial class MainWindow : Window
         Root.Loaded+=(_,_)=>{PositionSection();WatchPanelFocus();};AppWindow.Changed+=(_,_)=>{if(!exiting)PositionSection();};
         if(isolated) SeedSmoke();else StartClipdiaryOffer();
     }
-    private void Prune(){if(!clipdiaryImportRunning)store.Prune(AppSettings.RetentionDays(store.Get("days","90")));}
+    private void Prune(){if(!clipdiaryImportRunning)store.Prune(AppSettings.RetentionDays(store.Get("days","30")));}
     private bool RegisterKey()
     {
         bool ok=Native.RegisterHotKey(hwnd,1,Win32Hotkey.Modifiers(store.Get("ctrl","0")=="1"),AppSettings.FunctionKey(store.Get("key","112"),112));
@@ -173,9 +173,9 @@ public sealed partial class MainWindow : Window
             int y=Math.Clamp(p.Y+12,area.Y,Math.Max(area.Y,area.Y+area.Height-AppWindow.Size.Height));
             AppWindow.Move(new PointInt32(x,y));
         }
-        AppWindow.Show();Activate();Native.SetForegroundWindow(hwnd);FocusPanel();PositionSection();WatchPanelFocus();ShowUpdateOffer();
+        AppWindow.Show();Activate();Native.SetForegroundWindow(hwnd);FocusPanel();PositionSection();WatchPanelFocus();ShowUpdateOffer();DockCollapsedPanel();
     }
-    private void Hide(){EndWindowPointerGesture();CancelSectionHover();CancelPanelFade();activeDialog?.Hide();sectionFocusTimer.Stop();sectionPopup.IsOpen=false;preview.IsOpen=false;hoverTimer.Stop();leaveTimer.Stop();AppWindow.Hide();CollapseSearch(false);}
+    private void Hide(){if(templatePointerRow is not null)EndTemplateDrag();EndWindowPointerGesture();CancelSectionHover();ForgetSectionAutoClose();CancelPanelFade();activeDialog?.Hide();sectionFocusTimer.Stop();sectionPopup.IsOpen=false;preview.IsOpen=false;hoverTimer.Stop();leaveTimer.Stop();AppWindow.Hide();CollapseSearch(false);}
     private void ToggleVisibility()
     {
         if(exiting||takingScreenshot)return;
@@ -186,7 +186,7 @@ public sealed partial class MainWindow : Window
     {
         if(exiting)return;
         if(clipdiaryImportRunning){if(!quitAfterClipdiaryImport)_=CancelImportAndQuit();return;}
-        EndWindowPointerGesture();exiting=true;CancelSectionHover();CancelPanelFade();activeDialog?.Hide();sectionFocusTimer.Stop();sectionPopup.IsOpen=false;StopUpdates();StopMicrophone();hoverTimer.Stop();leaveTimer.Stop();cleanupTimer.Stop();
+        if(templatePointerRow is not null)EndTemplateDrag();EndWindowPointerGesture();exiting=true;CancelSectionHover();CancelPanelFade();activeDialog?.Hide();sectionFocusTimer.Stop();sectionPopup.IsOpen=false;StopUpdates();StopMicrophone();hoverTimer.Stop();leaveTimer.Stop();cleanupTimer.Stop();
         captureWindow?.Cancel();
         editor?.Close();
         if(!isolated)Native.RemoveClipboardFormatListener(hwnd);
@@ -195,10 +195,13 @@ public sealed partial class MainWindow : Window
     }
     private async void TakeScreenshot()
     {
-        if(takingScreenshot||(dialogOpen&&activeDialog is null)||exiting||editor is {CanCapture:false})return;
+        if(takingScreenshot||templateDragInProgress||(dialogOpen&&activeDialog is null)||exiting||editor is {CanCapture:false})return;
         EndWindowPointerGesture();
-        bool keepWindow=OwnForeground()||activeDialog is not null;
+        // A visible panel is part of the screenshot even when the text cursor
+        // remains in another application. Foreground ownership is not visibility.
+        bool keepWindow=AppWindow.IsVisible||activeDialog is not null;
         bool restoreEditor=editor is {IsClosed:false}&&editor.AppWindow.IsVisible;
+        CancelSectionHover();CancelPanelFade();
         takingScreenshot=true;
         try
         {
@@ -284,12 +287,14 @@ public sealed partial class MainWindow : Window
     private void SearchChanged(object sender,TextChangedEventArgs e){if(!exiting&&store is not null)Render();}
     private void Render()
     {
-        if(rendering||exiting)return;rendering=true;
+        if(rendering||exiting)return;
+        if(templateDragInProgress){templateRenderPending=true;return;}
+        templateRenderPending=false;rendering=true;
         try
         {
             CancelSectionHover();hoverTimer.Stop();preview.IsOpen=false;hovered=null;
             long? previousId=selected>=0&&selected<visible.Count?visible[selected].Clip.Id:null;
-            Groups.Children.Clear();TemplateGroups.Children.Clear();sectionHeadings.Clear();visible.Clear();
+            Groups.Children.Clear();TemplateGroups.Children.Clear();sectionHeadings.Clear();sectionAutoCloseRows.Clear();ResetTemplateRenderState();visible.Clear();
             string query=Search.Text.Trim();
             var groups=HistoryView.Groups(store.All(),query,store.Get("templateorder",""),DateTime.Today);
             // Поиск сохраняет приоритет шаблонов; в панели их постоянное место — внизу.
@@ -301,6 +306,8 @@ public sealed partial class MainWindow : Window
             }
             if(groups.All(g=>g.Clips.Count==0))Groups.Children.Add(new TextBlock{Text=T(query.Length>0?"Ничего не найдено":"Скопируйте текст или картинку — они появятся здесь."),TextWrapping=TextWrapping.Wrap,Margin=new Thickness(8,24,8,8),Opacity=.65});
             FitCompactPanel(displayGroups);RenderSideSection(displayGroups);
+            if(!AllSectionsCollapsed)preserveCollapsedPosition=false;
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,DockCollapsedPanel);
             selected=previousId.HasValue?visible.FindIndex(v=>v.Clip.Id==previousId):-1;
             if(selected<0&&visible.Count>0)selected=0;Highlight();
         }
@@ -321,13 +328,15 @@ public sealed partial class MainWindow : Window
         var calmBase=((SolidColorBrush)ClipBrush("ClipHeaderBrush")).Color;var calmSelection=((SolidColorBrush)ClipBrush("ClipSelectionBrush")).Color;
         byte Blend(byte a,byte b)=>(byte)(a+(b-a)*.35);
         var calmHover=new SolidColorBrush(Windows.UI.Color.FromArgb(255,Blend(calmBase.R,calmSelection.R),Blend(calmBase.G,calmSelection.G),Blend(calmBase.B,calmSelection.B)));
-        button.PointerEntered+=(_,_)=>{hoverTimer.Stop();hovered=null;preview.IsOpen=false;headerBackground.Background=calmHover;QueueSectionHover(title,button);};
+        button.PointerEntered+=(_,_)=>{hoverTimer.Stop();hovered=null;preview.IsOpen=false;headerBackground.Background=calmHover;ObserveOpenSectionPointer(title);QueueSectionHover(title,button,pointerObserved:true);};
         button.PointerExited+=(_,_)=>{headerBackground.Background=ClipBrush("ClipHeaderBrush");LeaveSectionHover(title,button);};
         button.Click+=(_,_)=>ToggleSection(title);ClipRows.Children.Add(new Border{Child=button,BorderBrush=ClipBrush("ClipSeparatorBrush"),BorderThickness=new Thickness(0,0,0,1)});
-        if(!buildingSection)sectionHeadings[title]=button;
+        if(!buildingSection){sectionHeadings[title]=button;RegisterSectionAutoCloseGroup(title);}
         if(!open||SideSections&&!buildingSection)return;
-        foreach(var clip in clips)
+        bool templateSearch=Search.Text.Trim().Length>0;
+        foreach(var clip in TemplateRenderClips(title,clips,templateSearch))
         {
+            if(!PrepareTemplateFolderRow(title,clip,templateSearch))continue;
             var grid=new Grid{ColumnSpacing=12,Margin=new Thickness(20,10,20,10),MinHeight=30};grid.ColumnDefinitions.Add(new(){Width=new GridLength(clip.Image is null?26:76)});grid.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});grid.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
             var text=new TextBlock{Text=clip.Kind=="image"&&clip.Name.Length==0?T("Изображение"):clip.Label,Foreground=primaryBrush,FontSize=14,MaxLines=1,TextTrimming=TextTrimming.CharacterEllipsis,VerticalAlignment=VerticalAlignment.Center};
             if(clip.Image is not null)
@@ -349,9 +358,10 @@ public sealed partial class MainWindow : Window
             var indicator=new Border{Width=3,Height=28,CornerRadius=new CornerRadius(2),Background=ClipBrush("ClipIndicatorBrush"),HorizontalAlignment=HorizontalAlignment.Left,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(3,0,0,0),Visibility=Visibility.Collapsed};
             var contents=new Grid();contents.Children.Add(grid);contents.Children.Add(indicator);
             var row=new Border{Child=contents,Tag=indicator,BorderBrush=ClipBrush("ClipSeparatorBrush"),BorderThickness=new Thickness(0,0,0,1),Background=new SolidColorBrush(Microsoft.UI.Colors.Transparent),BackgroundTransition=new BrushTransition{Duration=TimeSpan.FromMilliseconds(140)}};
-            int index=visible.Count;visible.Add((clip,row));ClipRows.Children.Add(row);
-            row.Tapped+=async(_,e)=>{if(!IsButtonSource(e.OriginalSource))await Copy(clip);};
-            row.PointerEntered+=(_,_)=>{selected=index;Highlight();hovered=clip;hoverAnchor=row;hoverTimer.Stop();hoverTimer.Start();};
+            int index=visible.Count;visible.Add((clip,row));ClipRows.Children.Add(row);if(!buildingSection)RegisterSectionAutoCloseRow(title,row);
+            AttachTemplateClipDrag(clip,row,templateSearch);
+            row.Tapped+=async(_,e)=>{if(!IsButtonSource(e.OriginalSource)&&(!clip.Template||!SuppressTemplateTap()))await Copy(clip);};
+            row.PointerEntered+=(_,_)=>{ObserveOpenSectionPointer(title);selected=index;Highlight();hovered=clip;hoverAnchor=row;hoverTimer.Stop();hoverTimer.Start();};
             row.PointerExited+=(_,_)=>{hoverTimer.Stop();hovered=null;leaveTimer.Start();};
             var menu=new MenuFlyout();TrackMenu(menu);
             void Item(string title,Action action){var item=new MenuFlyoutItem{Text=T(title)};item.Click+=(_,_)=>action();menu.Items.Add(item);}
@@ -378,8 +388,9 @@ public sealed partial class MainWindow : Window
     {try{await LoadImageAsync(image,bytes);if(image.Source is BitmapImage bitmap)detail.Text=$"{bitmap.PixelWidth} × {bitmap.PixelHeight} · PNG";}catch{detail.Text="PNG";}}
     private void RootKeyDown(object sender,KeyRoutedEventArgs e)
     {
-        if(dialogOpen)return;
+        if(e.Handled||dialogOpen||templateDragInProgress)return;
         if(e.Key==VirtualKey.Escape){if(Search.Visibility==Visibility.Visible)CollapseSearch();else Hide();e.Handled=true;return;}
+        if(IsTemplateFolderKeySource(e.OriginalSource as DependencyObject))return;
         if(e.Key==VirtualKey.Down||e.Key==VirtualKey.Up)
         {if(visible.Count>0){selected=Math.Clamp(selected+(e.Key==VirtualKey.Down?1:-1),0,visible.Count-1);Highlight();visible[selected].Row.StartBringIntoView();}e.Handled=true;}
         if(e.Key==VirtualKey.Enter&&selected>=0){_=Copy(visible[selected].Clip);e.Handled=true;}
@@ -388,7 +399,7 @@ public sealed partial class MainWindow : Window
     }
     private async void ShowPreview()
     {
-        if(exiting||windowResizing)return;
+        if(exiting||windowResizing||templateDragInProgress)return;
         try
         {
         var clip=hovered;var anchor=hoverAnchor;if(clip is null||anchor is null)return;overPreview=false;
@@ -397,7 +408,7 @@ public sealed partial class MainWindow : Window
         if(clip.Image is not null){var img=new Image{MaxHeight=420,Stretch=Stretch.Uniform};body.Children.Add(img);await LoadImageAsync(img,clip.Image);}
         else body.Children.Add(new ScrollViewer{MaxHeight=420,IsTabStop=false,Content=new TextBlock{Text=clip.Text,TextWrapping=TextWrapping.Wrap,IsTextSelectionEnabled=false}});
         body.PointerEntered+=(_,_)=>{overPreview=true;leaveTimer.Stop();};body.PointerExited+=(_,_)=>{overPreview=false;leaveTimer.Start();};
-        if(exiting||windowResizing||hovered?.Id!=clip.Id)return;
+        if(exiting||windowResizing||templateDragInProgress||hovered?.Id!=clip.Id)return;
         PaintText(body,primaryBrush);
         var border=new Border{Child=body,Padding=new Thickness(16),CornerRadius=new CornerRadius(activeTheme.Corner),BorderThickness=new Thickness(1),RequestedTheme=Root.ActualTheme,Background=ClipBrush("ClipSearchBrush"),BorderBrush=ClipBrush("ClipSeparatorBrush")};
         preview.Child=border;preview.XamlRoot=Root.XamlRoot;
@@ -443,8 +454,7 @@ public sealed partial class MainWindow : Window
     }
     private void MoveTemplate(long id,int direction)
     {
-        var ids=visible.Where(v=>v.Clip.Template).Select(v=>v.Clip.Id).ToList();int i=ids.IndexOf(id),j=i+direction;
-        if(i<0||j<0||j>=ids.Count)return;(ids[i],ids[j])=(ids[j],ids[i]);store.Set("templateorder",string.Join(',',ids));Render();
+        MoveTemplateEntryByOffset(TemplateClipKey(id),direction);
     }
     private void SetStartup(bool value)
     {
@@ -465,7 +475,7 @@ public sealed partial class MainWindow : Window
             finally{if(!exiting)checkUpdates.IsEnabled=true;}
         };
         var sectionLayout=new ComboBox{Header=T("Раскрытие разделов"),HorizontalAlignment=HorizontalAlignment.Stretch};sectionLayout.Items.Add(T("Вбок, где больше места"));sectionLayout.Items.Add(T("Внутри списка"));sectionLayout.SelectedIndex=store.Get("sectionlayout","side")=="inline"?1:0;panel.Children.Add(sectionLayout);
-        var days=new ComboBox{Header=T("Хранить историю"),HorizontalAlignment=HorizontalAlignment.Stretch};foreach(var s in new[]{"30 дней","90 дней","Бессрочно"})days.Items.Add(T(s));days.SelectedIndex=store.Get("days","90") switch{"30"=>0,"0"=>2,_=>1};panel.Children.Add(days);
+        var days=new ComboBox{Header=T("Хранить историю"),HorizontalAlignment=HorizontalAlignment.Stretch};foreach(var s in new[]{"30 дней","90 дней","Бессрочно"})days.Items.Add(T(s));days.SelectedIndex=AppSettings.RetentionDays(store.Get("days","30")) switch{30=>0,0=>2,_=>1};panel.Children.Add(days);
         var theme=new ComboBox{Header=T("Тема"),HorizontalAlignment=HorizontalAlignment.Stretch};foreach(var item in AppThemes.All)theme.Items.Add(T(item.Name));theme.SelectedIndex=AppThemes.All.ToList().FindIndex(t=>t.Id==activeTheme.Id);panel.Children.Add(theme);
         ComboBox HotkeyCombo(string header,string keyName,string ctrlName,int fallback)
         {
@@ -529,7 +539,9 @@ public sealed partial class MainWindow : Window
             encoder.SetPixelData(BitmapPixelFormat.Bgra8,BitmapAlphaMode.Ignore,320,180,96,96,pixels);await encoder.FlushAsync();stream.Seek(0);
             byte[] png=new byte[(int)stream.Size];using var reader=new DataReader(stream);await reader.LoadAsync((uint)png.Length);reader.ReadBytes(png);store.Add("image","",image:png);
         }
-        var item=store.All().First(c=>c.Text=="test@example.com");store.Template(item.Id,true);Render();
+        var item=store.All().First(c=>c.Text=="test@example.com");store.Template(item.Id,true);
+        if(Environment.GetCommandLineArgs().Contains("--template-demo"))store.Template(store.All().First(c=>c.Text=="Тестовая запись ClipShot").Id,true);
+        Render();
         if(Environment.GetCommandLineArgs().Any(a=>a is "--editor-self-test" or "--editor-demo")){await RunEditorChecks(Environment.GetCommandLineArgs().Contains("--editor-demo"));return;}
         if(shellTest){WriteShellReport();return;}
         if(Environment.GetCommandLineArgs().Any(a=>a is "--capture-self-test" or "--capture-demo"))

@@ -18,6 +18,7 @@ public sealed partial class MainWindow
             OpenSearchClick(this,new());
             Check(!IsWindowDragSource(Search)&&!IsWindowDragSource(ManualUpdateLink)&&!IsWindowDragSource(sectionHeadings["Сегодня"])&&!IsWindowDragSource(visible[0].Row),"search, clips, command buttons and section headings cannot start window dragging");
             Check(!IsWindowDragSource(SearchGlyph)&&IsWindowDragSource(HistoryScroll)&&IsWindowDragSource(Root),"magnifier is a command while empty history and root remain drag surfaces");
+            Check(WindowHandle.ActualWidth>=60&&WindowHandle.ActualHeight>=18&&IsWindowDragSource(WindowHandle)&&IsWindowDragSource(WindowHandleMark),"the visible top grip is a dedicated window drag target, including its visual mark");
             Search.Text="drag check";await Task.Delay(80);
             Check(ReferenceEquals(Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(Root.XamlRoot),Search)&&windowPointerGesture==WindowPointerGesture.None&&AppWindow.Position.X==position.X&&AppWindow.Position.Y==position.Y,"focusing and typing in search leaves window drag inactive and position unchanged");
             Search.Text="";await Task.Delay(80);

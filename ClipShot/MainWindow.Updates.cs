@@ -21,7 +21,7 @@ public sealed partial class MainWindow
     private string PendingUpdateFile=>Path.Combine(dataFolder,"Updates","pending.json");
     private bool AutomaticUpdates=>true;
     private string NoUpdatesVersionDetail=>$"{T("Текущая версия")}: {typeof(App).Assembly.GetName().Version!.ToString(3)}";
-    private bool UpdateOperationBusy=>clipdiaryImportRunning||dialogOpen||takingScreenshot||editor is not null||capturing||captureAgain;
+    private bool UpdateOperationBusy=>templateDragInProgress||clipdiaryImportRunning||dialogOpen||takingScreenshot||editor is not null||capturing||captureAgain;
     private bool CanAutoDownload()=>!isolated&&!exiting&&AutomaticUpdates&&!UpdateOperationBusy;
     // Фоновая установка использует guarded UpdateQuit и ждёт простоя.
     // Явная ручная команда разрешает перезапуск, но также защищает открытый редактор.

@@ -5,7 +5,7 @@ public static class AppSettings
 {
     public static int WindowWidth(string value) => Number(value, 260, 220, 4096);
     public static int WindowHeight(string value) => Number(value, 220, 100, 4096);
-    public static int RetentionDays(string value) => value switch { "0" => 0, "30" => 30, _ => 90 };
+    public static int RetentionDays(string value) => value switch { "0" => 0, "90" => 90, _ => 30 };
     public static uint FunctionKey(string value, uint fallback) => uint.TryParse(value, out var key) && key is >= 112 and <= 123 ? key : fallback;
     private static int Number(string value, int fallback, int min, int max) => int.TryParse(value, out int number) ? Math.Clamp(number, min, max) : fallback;
 }

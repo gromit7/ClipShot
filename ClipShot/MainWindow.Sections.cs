@@ -20,6 +20,7 @@ public sealed partial class MainWindow
     {
         CancelSectionHover();
         if(!SideSections)return;
+        ForgetSectionAutoClose();
         activeSection=null;sectionInitialized=true;sectionPopup.IsOpen=false;preview.IsOpen=false;hoverTimer.Stop();hovered=null;
     }
     private void DismissSectionForExternalFocus(bool external)
@@ -55,7 +56,16 @@ public sealed partial class MainWindow
         var area=DisplayArea.GetFromWindowId(AppWindow.Id,DisplayAreaFallback.Nearest).WorkArea;double scale=Math.Max(1,Native.GetDpiForWindow(hwnd)/96d);
         var origin=new Native.Point();Native.ClientToScreen(hwnd,ref origin);
         double headingY=sectionHeadings.TryGetValue(activeSection,out var heading)?heading.TransformToVisual(Root).TransformPoint(new Windows.Foundation.Point()).Y:sectionHeadingIndex*41;
-        var bounds=SidePanelPlacement.Choose(AppWindow.Position.X,AppWindow.Position.Y,AppWindow.Size.Width,AppWindow.Size.Height,area.X,area.Y,area.Width,area.Height,(int)(360*scale),(int)(Math.Min(560,Math.Max(160,sectionRows.Children.Count*62))*scale),origin.Y+(int)(headingY*scale),(int)(8*scale));
+        var horizontal=SidePanelPlacement.Choose(AppWindow.Position.X,AppWindow.Position.Y,AppWindow.Size.Width,AppWindow.Size.Height,area.X,area.Y,area.Width,area.Height,(int)(360*scale),1,origin.Y+(int)(headingY*scale),(int)(8*scale));
+        sectionPopup.XamlRoot=Root.XamlRoot;
+        double borderWidth=sectionBorder.BorderThickness.Left+sectionBorder.BorderThickness.Right;
+        sectionRows.Measure(new Windows.Foundation.Size(Math.Max(1,horizontal.Width/scale-borderWidth),double.PositiveInfinity));
+        double naturalHeight=sectionRows.DesiredSize.Height;
+        sectionRows.InvalidateMeasure();
+        if(!double.IsFinite(naturalHeight)||naturalHeight<=0)naturalHeight=sectionRows.Children.Count*62d;
+        double contentHeight=Math.Max(160,(naturalHeight+sectionBorder.BorderThickness.Top+sectionBorder.BorderThickness.Bottom))*scale;
+        int desiredHeight=SidePanelPlacement.HeightForContent(contentHeight,area.Height,560*scale);
+        var bounds=SidePanelPlacement.Choose(AppWindow.Position.X,AppWindow.Position.Y,AppWindow.Size.Width,AppWindow.Size.Height,area.X,area.Y,area.Width,area.Height,(int)(360*scale),desiredHeight,origin.Y+(int)(headingY*scale),(int)(8*scale));
         sectionBorder.Width=bounds.Width/scale;sectionBorder.Height=bounds.Height/scale;sectionPopup.XamlRoot=Root.XamlRoot;
         sectionPopup.HorizontalOffset=(bounds.X-origin.X)/scale;sectionPopup.VerticalOffset=(bounds.Y-origin.Y)/scale;sectionPopup.IsOpen=true;
         WatchPanelFocus();
@@ -68,6 +78,7 @@ public sealed partial class MainWindow
     }
     private void ToggleSection(string title)
     {
+        ForgetSectionAutoClose(title);
         CancelSectionHover();suppressedHoverSection=title;
         if(SideSections){activeSection=activeSection==title?null:title;sectionInitialized=true;Render();FocusPanel();}
         else{expanded[title]=!expanded.GetValueOrDefault(title);Render();}

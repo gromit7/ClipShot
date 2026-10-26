@@ -92,24 +92,23 @@ internal sealed class MicrophoneNotice : Window
         }
         Animate("Opacity",0,1);Animate("(UIElement.RenderTransform).(TranslateTransform.X)",14,0);
         canvas.Loaded+=(_,_)=>entrance.Begin();
-        if(appNotice)
+        if(showHistory)
+        {
+            // Release notes stay readable until explicitly dismissed. Wheel
+            // scrolling and pointer movement must never start an expiry timer.
+            canvas.Tapped+=(_,_)=>Close();
+        }
+        else if(appNotice)
         {
             Native.SetWindowLongPtr(hwnd,-20,(nint)((long)Native.GetWindowLongPtr(hwnd,-20)|0x80000L));Native.SetLayeredWindowAttributes(hwnd,0,255,2);
-            Native.GetCursorPos(out var initialMouse);var clock=System.Diagnostics.Stopwatch.StartNew();var lifetime=new NoticeLifetime();bool readingHistory=false;timer.Interval=TimeSpan.FromMilliseconds(40);
+            Native.GetCursorPos(out var initialMouse);var clock=System.Diagnostics.Stopwatch.StartNew();var lifetime=new NoticeLifetime();timer.Interval=TimeSpan.FromMilliseconds(40);
             timer.Tick+=(_,_)=>
             {
                 bool input=Native.GetCursorPos(out var mouse);bool moved=input&&Math.Abs(mouse.X-initialMouse.X)+Math.Abs(mouse.Y-initialMouse.Y)>=3;
-                if(showHistory)
-                {
-                    var position=AppWindow.Position;var size=AppWindow.Size;
-                    bool over=input&&mouse.X>=position.X&&mouse.X<position.X+size.Width&&mouse.Y>=position.Y&&mouse.Y<position.Y+size.Height;
-                    if(over){if(!readingHistory)lifetime=new NoticeLifetime();readingHistory=true;Native.SetLayeredWindowAttributes(hwnd,0,255,2);return;}
-                    if(readingHistory){readingHistory=false;lifetime=new NoticeLifetime();}
-                }
                 byte alpha=lifetime.Opacity(clock.Elapsed,moved);if(alpha==0){Close();return;}Native.SetLayeredWindowAttributes(hwnd,0,alpha,2);
             };
         }
-        else timer.Tick+=(_,_)=>Close();Closed+=(_,_)=>{timer.Stop();entrance.Stop();};AppWindow.Show(false);if(!preview)timer.Start();
+        else timer.Tick+=(_,_)=>Close();Closed+=(_,_)=>{timer.Stop();entrance.Stop();};AppWindow.Show(false);if(!preview&&!showHistory)timer.Start();
     }
     private static SolidColorBrush Brush(byte r,byte g,byte b)=>new(Windows.UI.Color.FromArgb(255,r,g,b));
 }

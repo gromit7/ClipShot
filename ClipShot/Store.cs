@@ -9,7 +9,7 @@ public sealed record Clip(long Id, string Kind, string Text, string Html, string
     public string Label => Name.Length > 0 ? Name : Kind == "image" ? "Изображение" : Text.Replace('\r', ' ').Replace('\n', ' ');
 }
 public sealed record ImportSummary(int Imported,int Existing,int Skipped);
-public sealed class Store : IDisposable
+public sealed partial class Store : IDisposable
 {
     private readonly SqliteConnection db;
     public Store(string path)
@@ -26,6 +26,7 @@ public sealed class Store : IDisposable
         CREATE TABLE IF NOT EXISTS clips(id INTEGER PRIMARY KEY, hash TEXT NOT NULL UNIQUE, kind TEXT NOT NULL, text TEXT NOT NULL DEFAULT '', html TEXT NOT NULL DEFAULT '', rtf TEXT NOT NULL DEFAULT '', image BLOB, template INTEGER NOT NULL DEFAULT 0, name TEXT NOT NULL DEFAULT '', seen TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
         """; c.ExecuteNonQuery();
+        InitializeTemplateFolders();
         }
         catch { db.Dispose(); throw; }
     }

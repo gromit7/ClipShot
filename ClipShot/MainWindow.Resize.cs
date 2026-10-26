@@ -45,6 +45,9 @@ public sealed partial class MainWindow
         // системная move/size-петля может пережить исходный отпуск кнопки.
         windowPointerGesture=gesture;windowGesturePointer=pointer;windowGesturePointerId=pointerId;
         windowGestureMouse=mouse;windowGesturePosition=AppWindow.Position;windowGestureSize=AppWindow.Size;
+        // A deliberate move may detach the collapsed panel until a category
+        // is expanded and collapsed again; automatic docking must not fight it.
+        if(gesture==WindowPointerGesture.Move&&AllSectionsCollapsed)preserveCollapsedPosition=true;
         BeginWindowResize();
         if(!windowGestureReady){windowGestureTimer.Tick+=(_,_)=>PollWindowPointerGesture();windowGestureReady=true;}
         windowGestureTimer.Start();

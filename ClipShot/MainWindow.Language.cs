@@ -22,6 +22,7 @@ public sealed partial class MainWindow
         Title=$"ClipShot {version} — {T("буфер обмена и скриншоты")}";TitleText.Text="ClipShot";Search.PlaceholderText="";
         ToolTipService.SetToolTip(Search,T("Поиск по истории"));
         ToolTipService.SetToolTip(SearchToggle,T("Поиск по истории"));
+        ToolTipService.SetToolTip(WindowHandle,T("Перетащить окно"));AutomationProperties.SetName(WindowHandle,T("Перетащить окно"));
         AutomationProperties.SetName(SearchToggle,T("Поиск по истории"));
         ToolTipService.SetToolTip(SearchClose,T("Закрыть поиск"));
         AutomationProperties.SetName(SearchClose,T("Закрыть поиск"));
