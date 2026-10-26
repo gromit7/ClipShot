@@ -14,7 +14,7 @@ $dirty=& git -C $repo status --porcelain
 if($LASTEXITCODE -ne 0 -or $dirty){throw 'Сначала сохраните все исходники выпуска в чистом коммите Git.'}
 $commit=(& git -C $repo rev-parse HEAD).Trim()
 $gate=Get-Content -LiteralPath (Join-Path $repo 'TestResults/release-checks.json') -Raw | ConvertFrom-Json
-if(@($gate | Where-Object {-not $_.Passed}).Count -or -not($gate | Where-Object {$_.Name -eq 'Isolated install, running-app upgrade and uninstall' -and $_.Passed}) -or -not($gate | Where-Object {$_.Name -eq 'Installer OS compatibility matrix' -and $_.Passed}) -or -not($gate | Where-Object {$_.Name -eq 'Windows 11 wrapper install and upgrade' -and $_.Passed})){throw 'Полная проверка выпуска не завершена.'}
+if(@($gate | Where-Object {-not $_.Passed}).Count -or -not($gate | Where-Object {$_.Name -eq 'Isolated install, running-app upgrade and uninstall' -and $_.Passed}) -or -not($gate | Where-Object {$_.Name -eq 'Installer OS compatibility matrix' -and $_.Passed}) -or -not($gate | Where-Object {$_.Name -eq 'Windows 11 wrapper install and upgrade' -and $_.Passed}) -or -not($gate | Where-Object {$_.Name -eq 'Released 0.7.4 updater migration from App working directory' -and $_.Passed})){throw 'Полная проверка выпуска не завершена.'}
 $trx=[xml](Get-Content -LiteralPath (Join-Path $repo 'TestResults/core.trx') -Raw)
 $counters=$trx.TestRun.ResultSummary.Counters
 if([int]$counters.failed -ne 0 -or [int]$counters.passed -eq 0){throw 'Нет успешного отчёта модульных тестов.'}

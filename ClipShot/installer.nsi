@@ -46,6 +46,16 @@ Var FailedInstall
 Var OriginalInstall
 Var TransactionPrepared
 Var TransactionCommitted
+Var BridgeTrusted
+Var BridgeId
+Var BridgeDirectory
+Var BridgeToken
+Var BridgeReady
+Var BridgeTokenHandle
+Var BridgeReadyHandle
+Var BridgePid
+Var BridgeArgs
+Var UpdaterDirectory
 Name "ClipShot"
 OutFile "..\${OUTPUT_NAME}"
 InstallDir "$LOCALAPPDATA\Programs\ClipShot"
@@ -80,6 +90,7 @@ LangString InstallerWelcomeText 1049 "Мастер установит ClipShot �
 !insertmacro MUI_LANGUAGE "Russian"
 
 Function .onInit
+  StrCpy $BridgeTrusted "0"
   SetShellVarContext current
   StrCpy $InstallResult "installed"
   IfFileExists "$INSTDIR\ClipShot.exe" 0 +2
@@ -187,6 +198,7 @@ Function .onInit
         System::Call 'kernel32::OpenMutexW(i 0x100000, i 0, w "$UpdaterToken") p.r2'
         ${If} $2 != 0
           System::Call 'kernel32::CloseHandle(p r2)'
+          StrCpy $BridgeTrusted "1"
           Goto setup_allowed
         ${EndIf}
       ${EndIf}
@@ -197,8 +209,117 @@ Function .onInit
     Abort
   ${EndIf}
   setup_allowed:
+  Call ApplyUpdaterDirectory
+  Call BridgeLegacyUpdater
+  SetOutPath "$TEMP"
 FunctionEnd
 
+; Только подтверждённый updater вправе заменить папку из старого InstallDirRegKey.
+; При тестировании маршрут остаётся в отдельной ветке TestRoot\App.
+Function ApplyUpdaterDirectory
+  ${GetParameters} $0
+  ClearErrors
+  ${GetOptions} $0 "/APPDIR=" $UpdaterDirectory
+  ${If} ${Errors}
+    Return
+  ${EndIf}
+  ${If} $BridgeTrusted != "1"
+    SetErrorLevel 2
+    Abort
+  ${EndIf}
+  GetFullPathName $UpdaterDirectory $UpdaterDirectory
+  ${If} $TestRoot != ""
+    ${If} $UpdaterDirectory != "$TestRoot\App"
+      StrCpy $1 "$TestRoot\App\"
+      StrLen $0 $1
+      StrCpy $2 $UpdaterDirectory $0
+      ${If} $2 != $1
+        SetErrorLevel 2
+        Abort
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
+  IfFileExists "$UpdaterDirectory\ClipShot.exe" target_valid
+    SetErrorLevel 2
+    Abort
+  target_valid:
+  StrCpy $INSTDIR $UpdaterDirectory
+  StrCpy $InstallResult "updated"
+FunctionEnd
+; Старый runner удерживает CWD внутри INSTDIR и мешает атомарному Rename.
+; Новый helper принимает проверенный пакет до ACK, затем ждёт выхода старого
+; runner. Код4 заставляет старый runner штатно отпустить блокировки и выйти.
+Function BridgeLegacyUpdater
+  ${If} $BridgeTrusted != "1"
+    Return
+  ${EndIf}
+  ${GetParameters} $0
+  ClearErrors
+  ${GetOptions} $0 "/UPDATERREADY" $1
+  ${IfNot} ${Errors}
+    Return
+  ${EndIf}
+  System::Call 'ole32::CoCreateGuid(g .r0) i.r1'
+  ${If} $1 != 0
+    SetErrorLevel 4
+    Quit
+  ${EndIf}
+  StrCpy $BridgeId $0 8 1
+  StrCpy $1 $0 4 10
+  StrCpy $BridgeId "$BridgeId$1"
+  StrCpy $1 $0 4 15
+  StrCpy $BridgeId "$BridgeId$1"
+  StrCpy $1 $0 4 20
+  StrCpy $BridgeId "$BridgeId$1"
+  StrCpy $1 $0 12 25
+  StrCpy $BridgeId "$BridgeId$1"
+  StrCpy $BridgeDirectory "$LOCALAPPDATA\ClipNest\Updates\bootstrap-$BridgeId"
+  ${If} $TestRoot != ""
+    StrCpy $BridgeDirectory "$TestRoot\Updates\bootstrap-$BridgeId"
+  ${EndIf}
+  StrCpy $BridgeToken "Local\ClipShot.UpdateBridge.Token.$BridgeId"
+  StrCpy $BridgeReady "Local\ClipShot.UpdateBridge.Ready.$BridgeId"
+  System::Call 'kernel32::CreateMutexW(p 0, i 0, w "$BridgeToken") p.r0'
+  StrCpy $BridgeTokenHandle $0
+  System::Call 'kernel32::CreateEventW(p 0, i 1, i 0, w "$BridgeReady") p.r0'
+  StrCpy $BridgeReadyHandle $0
+  ${If} $BridgeTokenHandle == 0
+  ${OrIf} $BridgeReadyHandle == 0
+    SetErrorLevel 4
+    Quit
+  ${EndIf}
+  SetOutPath "$BridgeDirectory"
+  ClearErrors
+  File /oname=ClipShot.Updater.exe "${PUBLICATION_DIR}\Updater\ClipShot.Updater.exe"
+  ${If} ${Errors}
+    SetErrorLevel 4
+    Quit
+  ${EndIf}
+  System::Call 'kernel32::GetCurrentProcessId() i.r0'
+  StrCpy $BridgePid $0
+  StrCpy $BridgeArgs '"$BridgeDirectory\ClipShot.Updater.exe" --bridge "$EXEPATH" "$INSTDIR\ClipShot.exe" "$BridgeToken" "$BridgeReady" "$BridgePid"'
+  ${If} $TestRoot != ""
+    StrCpy $BridgeArgs '$BridgeArgs "--test-root=$TestRoot" --test-health'
+  ${EndIf}
+  ${If} $AutomaticInstall == "1"
+    StrCpy $BridgeArgs '$BridgeArgs --automatic'
+  ${EndIf}
+  ${If} $StartupInstall == "1"
+    StrCpy $BridgeArgs '$BridgeArgs --startup'
+  ${EndIf}
+  ClearErrors
+  Exec $BridgeArgs
+  ${IfNot} ${Errors}
+    System::Call 'kernel32::WaitForSingleObject(p $BridgeReadyHandle, i 30000) i.r0'
+    ${If} $0 == 0
+      DetailPrint "Передача обновления совместимому обновлятору завершена."
+    ${EndIf}
+  ${EndIf}
+  System::Call 'kernel32::CloseHandle(p $BridgeReadyHandle)'
+  System::Call 'kernel32::CloseHandle(p $BridgeTokenHandle)'
+  SetErrorLevel 4
+  Quit
+FunctionEnd
 Function CheckOsBuild
   StrCpy $OsAllowed "1"
   ${If} $OsBuild < ${MIN_BUILD}

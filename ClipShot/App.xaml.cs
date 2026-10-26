@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml;
 namespace ClipShot;
 public partial class App : Application
 {
@@ -24,9 +24,11 @@ public partial class App : Application
         if (!first) { if(command.Contains("--toggle-microphone")){Native.PostMessage((nint)0xffff,MicrophoneMessage,0,0);Exit();return;}if(!command.Contains("--background"))Native.PostMessage((nint)0xffff,ShowMessage,0,0);Exit(); return; }
         window = new MainWindow(isolated);
         var health=command.FirstOrDefault(a=>a.StartsWith("--update-health-file="));
-        if(health is not null&&!isolated)
+        if(health is not null&&(!isolated||(command.Contains("--update-health-test")&&!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CLIPSHOT_TEST_ROOT")))))
         {
-            string marker=Path.GetFullPath(health["--update-health-file=".Length..]);string updates=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ClipNest","Updates")+Path.DirectorySeparatorChar;
+            string marker=Path.GetFullPath(health["--update-health-file=".Length..]);
+            // Тестовая health-ветка остаётся внутри проверенного TEMP/ClipShot.Tests.
+            string updates=isolated?Path.GetFullPath(Path.Combine(TestEnvironment.DataFolder(true,Environment.GetEnvironmentVariable("CLIPSHOT_TEST_ROOT")),"..","Updates"))+Path.DirectorySeparatorChar:Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ClipNest","Updates")+Path.DirectorySeparatorChar;
             if(marker.StartsWith(updates,StringComparison.OrdinalIgnoreCase))File.WriteAllText(marker,"ready");
         }
         if(command.Contains("--toggle-microphone"))Native.PostMessage((nint)0xffff,MicrophoneMessage,0,0);

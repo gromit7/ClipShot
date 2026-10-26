@@ -63,7 +63,7 @@ public sealed partial class MainWindow
             {
                 noticeTimer.Stop();if(exiting)return;
                 ShowUpdateMessage(install.EndsWith("=installed",StringComparison.Ordinal)?"Программа установлена":"Программа обновлена",
-                    "• Разделы раскрываются при наведении\n• Розовая тема с котиками\n• Пакет для вашей версии Windows",persistent:true);
+                    "• Исправлено автообновление со старых версий\n• Поиск открывается только лупой\n• Можно повторить неудачное обновление вручную",persistent:true);
             };noticeTimer.Start();
         }
     }
@@ -232,7 +232,7 @@ public sealed partial class MainWindow
             string runnerFolder=Path.Combine(dataFolder,"Updates","runner-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(runnerFolder);
             string runner=Path.Combine(runnerFolder,"ClipShot.Updater.exe");File.Copy(Path.Combine(AppContext.BaseDirectory,"Updater","ClipShot.Updater.exe"),runner);
             if(startup?!CanStartupInstall:immediate?UpdateOperationBusy:!CanAutoInstall())return;
-            var start=new ProcessStartInfo(runner){UseShellExecute=false,CreateNoWindow=true};
+            var start=new ProcessStartInfo(runner){UseShellExecute=false,CreateNoWindow=true,WorkingDirectory=runnerFolder};
             start.ArgumentList.Add(preparedInstaller);start.ArgumentList.Add(preparedUpdate.Sha256);start.ArgumentList.Add(Environment.ProcessPath!);
             // Явное «Обновить сейчас» разрешает немедленную установку; фон ждёт guarded UpdateQuit.
             if(startup)start.ArgumentList.Add("--startup");else if(!immediate)start.ArgumentList.Add("--automatic");updateInstalling=true;

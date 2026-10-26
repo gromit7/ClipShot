@@ -65,7 +65,7 @@ $evidenceRoot=Join-Path $fixture 'evidence';New-Item -ItemType Directory -Path (
 Copy-Item -LiteralPath (Join-Path $repo 'scripts/New-ReleaseEvidence.ps1') -Destination (Join-Path $evidenceRoot 'scripts/New-ReleaseEvidence.ps1')
 Text (Join-Path $evidenceRoot 'ClipShot/ClipShot.csproj') '<Project><PropertyGroup><Version>9.8.7</Version></PropertyGroup></Project>'
 Text (Join-Path $evidenceRoot 'TestResults/core.trx') '<TestRun><ResultSummary><Counters total="3" passed="3" failed="0" /></ResultSummary></TestRun>'
-$gate=@('Isolated install, running-app upgrade and uninstall','Installer OS compatibility matrix','Windows 11 wrapper install and upgrade')|ForEach-Object{@{Name=$_;Passed=$true}}
+$gate=@('Isolated install, running-app upgrade and uninstall','Installer OS compatibility matrix','Windows 11 wrapper install and upgrade','Released 0.7.4 updater migration from App working directory')|ForEach-Object{@{Name=$_;Passed=$true}}
 Text (Join-Path $evidenceRoot 'TestResults/release-checks.json') (ConvertTo-Json -InputObject @($gate))
 foreach($name in 'ClipShot.exe','ClipShot.dll','ClipShot.pri','Assets/ClipShot.ico','Assets/ClipShot.Muted.ico','Assets/ClipShot.png','LICENSE','FileInventory.json','FileHashes.json','Updater/ClipShot.Updater.exe'){Text (Join-Path $evidenceRoot ('ClipShot-app/'+$name)) ('synthetic '+$name)}
 foreach($prefix in 'ClipShot','ClipShot-Win10','ClipShot-Win11'){Text (Join-Path $evidenceRoot "$prefix-Setup-9.8.7.exe") ('synthetic '+$prefix)}

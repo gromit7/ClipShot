@@ -9,7 +9,7 @@ public sealed class UiText(string? language)
     private static readonly Dictionary<string,string> EnglishText=new(StringComparer.Ordinal)
     {
         ["Розовая с котиками"]="Pink with cats",
-        ["• Разделы раскрываются при наведении\n• Розовая тема с котиками\n• Пакет для вашей версии Windows"]="• Hover to open sections\n• Pink theme with cats\n• Package for your Windows version",
+        ["• Исправлено автообновление со старых версий\n• Поиск открывается только лупой\n• Можно повторить неудачное обновление вручную"]="• Fixed updates from older versions\n• Click the magnifier to search\n• Retry a failed update manually",
         ["Наведите мышь на Сегодня, Шаблоны или другую дату — список раскроется без клика. Разделы открываются в сторону свободного места; обычный список можно вернуть в настройках. Пустые разделы скрыты."]="Hover over Today, Templates or another date to open its list without clicking. Sections open toward available space; inline mode is available in Settings. Empty sections are hidden.",
         ["Восемь тем: градиентная, прозрачная, белая, чёрная, тёмная, Windows 98, Windows XP и розовая с чёрным и рыжим котиками."]="Eight themes: gradient, transparent, white, black, dark, Windows 98, Windows XP and pink with black and ginger cats.",
         ["Всегда поверх окон"]="Always on top",

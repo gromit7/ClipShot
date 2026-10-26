@@ -125,6 +125,9 @@ try{
                     Set-Content -LiteralPath (Join-Path $reports 'installer-win11-checks.txt') -Value 'PASS legacy to Win11 wrapper, identical publication, synthetic data preserved and uninstall'
                 }finally{$env:CLIPSHOT_TEST_ROOT=$savedRoot}
             }
+            Step 'Released 0.7.4 updater migration from App working directory' {
+                & (Join-Path "$PSScriptRoot" 'Test-LegacyUpdaterBridge.ps1') -Setup $win11.Path -Publication $publication -NestedActualApp
+            }
             Step 'Transactional install, locked DLL and verification rollback' {
                 $transactionRoot=Join-Path ([IO.Path]::GetTempPath()) ('ClipShot.Tests/'+[guid]::NewGuid().ToString('N'))
                 New-Item -ItemType Directory -Path $transactionRoot -Force | Out-Null
