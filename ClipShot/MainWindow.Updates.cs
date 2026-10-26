@@ -128,16 +128,22 @@ public sealed partial class MainWindow
         }
         finally{updateLaunchRequested=false;if(!exiting)ShowUpdateOffer();}
     }
+    // Неудачный пакет не запускаем по кругу в фоне. Явная команда пользователя
+    // разрешает новую попытку; иначе она ошибочно получала «Обновлений нет».
+    private void ApplyCheckedUpdate(AppUpdate? candidate,bool explicitRequest)
+    {
+        availableUpdate=candidate;
+        if(!explicitRequest&&availableUpdate is {IsRollback:false}&&availableUpdate.Version.ToString()==store.Get("updateskip",""))availableUpdate=null;
+    }
     private async Task CheckUpdates(bool manual)
     {
         if(isolated||exiting||updateChecking||updateDownloading||updateInstalling||updateApplying||updateClient is null)return;
         updateChecking=true;updateMetadataValid=false;bool download=false;ShowUpdateOffer();
         try
         {
-            availableUpdate=await updateClient.CheckAsync(typeof(App).Assembly.GetName().Version!,updateStop.Token);
-            if(exiting)return;updateMetadataValid=true;nextUpdateCheckAttempt=DateTime.MinValue;
+            var checkedUpdate=await updateClient.CheckAsync(typeof(App).Assembly.GetName().Version!,updateStop.Token);
+            if(exiting)return;ApplyCheckedUpdate(checkedUpdate,manual||manualUpdateRequested);updateMetadataValid=true;nextUpdateCheckAttempt=DateTime.MinValue;
             store.Set("updatecheckslot",UpdateSchedule.DayKey(DateTime.Now));
-            if(availableUpdate is {IsRollback:false}&&availableUpdate.Version.ToString()==store.Get("updateskip",""))availableUpdate=null;
             if(preparedUpdate is not null&&preparedUpdate!=availableUpdate)
             {
                 preparedUpdate=null;preparedInstaller=null;updateInstallRequested=false;ClearPendingUpdate();

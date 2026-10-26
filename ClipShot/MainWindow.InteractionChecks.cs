@@ -22,6 +22,16 @@ public sealed partial class MainWindow
             Check(!ManualUpdateLink.IsEnabled&&!updatePulseActive&&ManualUpdateLink.Content.ToString()=="Устанавливаем обновление…","pressing update gives visible feedback and prevents repeated clicks");
             updateLaunchRequested=false;preparedInstaller=null;updateMetadataValid=false;ShowUpdateOffer();
             Check(!updatePulseActive&&ManualUpdateLink.IsEnabled,"clearing prepared update removes the reminder");
+            var failedCandidate=new AppUpdate(new Version(9,8,7),new Uri("https://github.com/gromit7/ClipShot/releases/download/v9.8.7/ClipShot-Setup-9.8.7.exe"),2048,new string('a',64));
+            store.Set("updateskip","9.8.7");ApplyCheckedUpdate(failedCandidate,false);
+            Check(availableUpdate is null,"failed update stays suppressed in the background to prevent restart loops");
+            ApplyCheckedUpdate(failedCandidate,true);
+            Check(availableUpdate==failedCandidate,"manual check offers the failed release again rather than reporting no updates");
+            ApplyCheckedUpdate(failedCandidate with{IsRollback=true},false);
+            Check(availableUpdate is {IsRollback:true},"fresh rollback policy is never blocked by the failed-version guard");
+            ApplyCheckedUpdate(failedCandidate with{Version=new Version(9,8,8)},false);
+            Check(availableUpdate?.Version==new Version(9,8,8),"a later release is still offered automatically after a failed version");
+            store.Set("updateskip","");availableUpdate=null;
             Check(Groups.Children.Count==visible.Count+2,"empty date sections are hidden without a search");
             store.Set("sectionlayout","side");Render();await Task.Delay(150);
             Check(Groups.Children.Count==1&&TemplateGroups.Children.Count==1&&sectionPopup.IsOpen&&visible.Count==5,"compact panel keeps dates above bottom templates and opens today beside it");
