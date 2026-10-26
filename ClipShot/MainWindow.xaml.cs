@@ -548,7 +548,8 @@ public sealed partial class MainWindow : Window
         {await RunCaptureChecks(Environment.GetCommandLineArgs().Contains("--capture-demo"));return;}
         if(Environment.GetCommandLineArgs().Contains("--demo"))
         {
-            if(Environment.GetCommandLineArgs().Contains("--install-preview"))installationNotice=new MicrophoneNotice("ClipShot обновлён","Работает в трее · Alt+F1 — история",MicrophoneState.Enabled,true,true);
+            if(Environment.GetCommandLineArgs().Contains("--install-preview"))installationNotice=new MicrophoneNotice("ClipShot обновлён","Работает в трее · Alt+F1 — история",MicrophoneState.Enabled,true,true,
+                ReleaseHistory.Load(Path.Combine(AppContext.BaseDirectory,"Assets","ReleaseHistory.json"),typeof(App).Assembly.GetName().Version!));
             if(Environment.GetCommandLineArgs().Contains("--microphone-preview"))
             {
                 var stateArg=Environment.GetCommandLineArgs().FirstOrDefault(a=>a.StartsWith("--microphone-state="));
