@@ -15,5 +15,6 @@ public class InstallationIntegrityTests
     [Fact]public void OldDllBesideNewExeAndPriFails(){string root=Fixture();File.WriteAllText(Path.Combine(root,"ClipShot.dll"),"synthetic previous release");Assert.False(InstallationIntegrity.Verify(root));}
     [Fact]public void MissingResourceFails(){string root=Fixture();File.Delete(Path.Combine(root,"ClipShot.pri"));Assert.False(InstallationIntegrity.Verify(root));}
     [Fact]public void ManifestCannotSkipCriticalFiles(){string root=Fixture();File.WriteAllText(Path.Combine(root,"FileHashes.json"),"{}");Assert.False(InstallationIntegrity.Verify(root));}
+    [Fact]public void ManifestCannotOmitOnlyTheDllWhileOtherHashesRemainValid(){string root=Fixture();string path=Path.Combine(root,"FileHashes.json");var hashes=JsonSerializer.Deserialize<Dictionary<string,string>>(File.ReadAllText(path))!;hashes.Remove("ClipShot.dll");File.WriteAllText(path,JsonSerializer.Serialize(hashes));Assert.False(InstallationIntegrity.Verify(root));}
     [Fact]public void InvalidManifestFails(){string root=Fixture();File.WriteAllText(Path.Combine(root,"FileHashes.json"),"invalid");Assert.False(InstallationIntegrity.Verify(root));}
 }

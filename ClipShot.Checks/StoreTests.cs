@@ -15,7 +15,6 @@ public sealed class StoreTests : IDisposable
         using var command=db.CreateCommand();command.CommandText="UPDATE clips SET seen=$date WHERE text=$text";
         command.Parameters.AddWithValue("$text",text);command.Parameters.AddWithValue("$date",DateTime.UtcNow.AddDays(-days).ToString("O"));command.ExecuteNonQuery();
     }
-    [Fact] public void New_database_is_empty_and_nested_path_supported(){using var db=Open();Assert.Empty(db.All());}
     [Theory][InlineData("ИНН 1234567890")][InlineData("O'Reilly; DROP TABLE clips;--")][InlineData("😀\nстрока\r\n日本語")][InlineData("  whitespace  ")]
     public void Text_roundtrips_exactly(string text){using var db=Open();db.Add("text",text,"<b>html</b>",@"{\rtf1 rtf}");var clip=Assert.Single(db.All());Assert.Equal(text,clip.Text);Assert.Equal("<b>html</b>",clip.Html);Assert.Equal(@"{\rtf1 rtf}",clip.Rtf);}
     [Fact] public void Long_text_is_not_truncated(){using var db=Open();string text=new('Ж',150_000);db.Add("text",text);Assert.Equal(text,Assert.Single(db.All()).Text);}

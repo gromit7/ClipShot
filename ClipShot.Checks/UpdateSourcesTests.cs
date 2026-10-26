@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
@@ -7,8 +8,10 @@ public class UpdateSourcesTests
 {
     private sealed class Network(byte[] bytes,bool failMirror=false,bool ignoreRange=false):HttpMessageHandler
     {
+        internal readonly ConcurrentQueue<(string Host,bool IsProbe)> Requests=[];
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken token)
         {
+            Requests.Enqueue((request.RequestUri!.Host,request.Headers.Range?.Ranges.Single().To is not null));
             bool mirror=request.RequestUri!.Host=="mirror.test";
             await Task.Delay(mirror?5:120,token);
             if(mirror&&failMirror)throw new HttpRequestException();
@@ -34,15 +37,17 @@ public class UpdateSourcesTests
     }
     [Fact]public async Task SingleSourceDoesNotIssueExtraProbeRequest()
     {
-        byte[] bytes=new byte[2048];using var http=new HttpClient(new Network(bytes));
+        byte[] bytes=new byte[2048];var network=new Network(bytes);using var http=new HttpClient(network);
         var ranked=await UpdateSources.RankAsync(http,Update(bytes),[],CancellationToken.None);Assert.Equal(Update(bytes).Download,Assert.Single(ranked));
+        Assert.Empty(network.Requests);
     }
     [Theory][InlineData("http://mirror.test/")][InlineData("https://user:pass@mirror.test/")][InlineData("https://mirror.test:444/")][InlineData("https://mirror.test/path")][InlineData("https://mirror.test/?x=1")]
     public void InvalidMirrorRootIsRejected(string root)=>Assert.Throws<InvalidDataException>(()=>UpdateSources.Package(new(root),Update(new byte[2048])));
     [Fact]public async Task RankedMirrorIsUsedByDownloader()
     {
         byte[] bytes=new byte[2048];string root=Path.Combine(Path.GetTempPath(),"ClipShot.Tests",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
-        using var client=new GitHubUpdates(new Network(bytes),[new("https://mirror.test/clipshot/")]);string path=Path.Combine(root,"setup.exe");
+        var network=new Network(bytes);using var client=new GitHubUpdates(network,[new("https://mirror.test/clipshot/")]);string path=Path.Combine(root,"setup.exe");
         await client.DownloadAsync(Update(bytes),path,new Progress<int>(),CancellationToken.None);Assert.True(UpdateProtocol.Verify(path,Update(bytes)));
+        Assert.Equal("mirror.test",Assert.Single(network.Requests,request=>!request.IsProbe).Host);
     }
 }

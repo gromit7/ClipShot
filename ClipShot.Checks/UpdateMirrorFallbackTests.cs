@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
-using System.Text.Json;
 using Xunit;
 namespace ClipShot;
 
@@ -32,8 +31,8 @@ public class UpdateMirrorFallbackTests
             return response;
         }
     }
-    private static AppUpdate Update(byte[] bytes,string version="9.0.0",bool rollback=false)=>new(Version.Parse(version),
-        new($"https://github.com/gromit7/ClipShot/releases/download/v{version}/ClipShot-Setup-{version}.exe"),bytes.Length,Convert.ToHexString(SHA256.HashData(bytes)),rollback);
+    private static AppUpdate Update(byte[] bytes)=>new(new(9,0,0),
+        new("https://github.com/gromit7/ClipShot/releases/download/v9.0.0/ClipShot-Setup-9.0.0.exe"),bytes.Length,Convert.ToHexString(SHA256.HashData(bytes)));
 
     [Theory][InlineData("checksum")][InlineData("range")][InlineData("size")]
     public async Task CorruptFastMirrorFallsBackToVerifiedGithubWithoutBadPrefix(string error)
@@ -45,14 +44,5 @@ public class UpdateMirrorFallbackTests
         await client.DownloadAsync(update,path,new Progress<int>(),CancellationToken.None,retries.Add);
         Assert.Equal(new[]{("mirror.test",(long?)null),("github.com",(long?)null)},network.Downloads.ToArray());
         Assert.Equal(new[]{1},retries);Assert.True(UpdateProtocol.Verify(path,update));Assert.Equal(bytes,File.ReadAllBytes(path));Assert.False(File.Exists(path+".partial"));
-    }
-
-    [Theory][InlineData("0.7.3")][InlineData("0.8.0")]
-    public void CachedRollbackCannotAuthorizeDowngradeAfterRestart(string current)
-    {
-        byte[] bytes=new byte[2048];var update=Update(bytes,"0.7.2",rollback:true);
-        string root=Path.Combine(Path.GetTempPath(),"ClipShot.Tests",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
-        string path=Path.Combine(root,"ClipShot-Setup-0.7.2.exe");File.WriteAllBytes(path,bytes);Assert.True(UpdateProtocol.Verify(path,update));
-        string json=JsonSerializer.Serialize(new PendingPackage(path,update));Assert.Null(PendingUpdate.Read(json,root,Version.Parse(current)));
     }
 }

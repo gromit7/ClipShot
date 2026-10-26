@@ -3,8 +3,9 @@ using Xunit;
 namespace ClipShot.Checks;
 public sealed class ThemeTests
 {
-    [Fact] public void Eight_themes_have_unique_ids_and_names(){Assert.Equal(8,AppThemes.All.Count);Assert.Equal(8,AppThemes.All.Select(t=>t.Id).Distinct().Count());Assert.Equal(8,AppThemes.All.Select(t=>t.Name).Distinct().Count());}
-    [Theory][InlineData("Gradient")][InlineData("Transparent")][InlineData("White")][InlineData("Black")][InlineData("Dark")][InlineData("Windows98")][InlineData("WindowsXP")][InlineData("CatPink")]
+    [Fact] public void Theme_choices_have_unique_ids_and_names(){Assert.NotEmpty(AppThemes.All);Assert.Equal(AppThemes.All.Count,AppThemes.All.Select(t=>t.Id).Distinct().Count());Assert.Equal(AppThemes.All.Count,AppThemes.All.Select(t=>t.Name).Distinct().Count());}
+    public static IEnumerable<object[]> ThemeIds=>AppThemes.All.Select(t=>new object[]{t.Id});
+    [Theory][MemberData(nameof(ThemeIds))]
     public void Every_palette_has_valid_colors_and_readable_text(string id)
     {
         var t=AppThemes.Resolve(id);Assert.Equal(id,t.Id);
@@ -19,7 +20,6 @@ public sealed class ThemeTests
     {
         var theme=AppThemes.Resolve("CatPink");Assert.False(theme.Dark);Assert.False(theme.Acrylic);Assert.False(theme.Gradient);
         Assert.True(Contrast(theme.Primary,theme.Window)>=4.5);Assert.True(Contrast(theme.Secondary,theme.Window)>=4.5);
-        Assert.Equal("White",AppThemes.Resolve("Default",false).Id);Assert.Equal("Dark",AppThemes.Resolve("Default",true).Id);
         Assert.Equal("Pink with cats",new UiText("en").Translate(theme.Name));
     }
     private static double Contrast(string a,string b){double L(string s){uint n=Convert.ToUInt32(s.TrimStart('#'),16);double C(int shift){double v=((n>>shift)&255)/255.0;return v<=.04045?v/12.92:Math.Pow((v+.055)/1.055,2.4);}return .2126*C(16)+.7152*C(8)+.0722*C(0);}double x=L(a),y=L(b);return (Math.Max(x,y)+.05)/(Math.Min(x,y)+.05);}

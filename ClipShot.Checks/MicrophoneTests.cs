@@ -28,5 +28,5 @@ public class MicrophoneTests
     [Fact]public void ChangingWindowsDefaultIsObserved(){var b=new Backend();var c=new MicrophoneController(b);Assert.Equal("a",Assert.Single(c.Read("default",[]).Devices).Id);b.Devices=b.Devices.Select(d=>d with{IsDefault=d.Id=="b"}).ToList();Assert.Equal("b",Assert.Single(c.Read("default",[]).Devices).Id);}
     [Fact]public void EmptyMachineHasNoTargets(){var b=new Backend();b.Devices.Clear();Assert.Equal(MicrophoneState.Unavailable,new MicrophoneController(b).Read("all",[]).State);}
     // Read-only hardware integration. Empty is valid on a PC without a microphone.
-    [Fact]public void CoreAudioEnumeratesCaptureEndpointsWithoutWriting(){var devices=new CoreAudioMicrophones().Read();Assert.Equal(devices.Count,devices.Select(d=>d.Id).Distinct().Count());Assert.All(devices,d=>Assert.False(string.IsNullOrWhiteSpace(d.Id)));Assert.True(devices.Count(d=>d.IsDefault)<=1);}
+    [Fact][Trait("Category","Hardware")]public void CoreAudioEnumeratesCaptureEndpointsWithoutWriting(){var devices=new CoreAudioMicrophones().Read();Assert.Equal(devices.Count,devices.Select(d=>d.Id).Distinct().Count());Assert.All(devices,d=>Assert.False(string.IsNullOrWhiteSpace(d.Id)));Assert.True(devices.Count(d=>d.IsDefault)<=1);}
 }

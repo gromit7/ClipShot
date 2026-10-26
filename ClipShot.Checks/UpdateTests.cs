@@ -112,13 +112,13 @@ public class UpdateTests
     {
         byte[] data=Enumerable.Range(0,2048).Select(i=>(byte)i).ToArray();string folder=Path.Combine(Path.GetTempPath(),"ClipShot.Tests",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);string path=Path.Combine(folder,"setup.exe");
         var update=new AppUpdate(new(9,0,0),new("https://github.com/gromit7/ClipShot/releases/download/v9.0.0/ClipShot-Setup-9.0.0.exe"),data.Length,Convert.ToHexString(SHA256.HashData(data)));
-        using var client=new GitHubUpdates(new Handler(data));await client.DownloadAsync(update,path,new Progress<int>(),CancellationToken.None);Assert.True(UpdateProtocol.Verify(path,update));Assert.False(File.Exists(path+".partial"));
+        using var client=new GitHubUpdates(new Handler(data),[]){DownloadRetryDelay=TimeSpan.Zero};await client.DownloadAsync(update,path,new Progress<int>(),CancellationToken.None);Assert.True(UpdateProtocol.Verify(path,update));Assert.False(File.Exists(path+".partial"));
         data[0]^=1;File.WriteAllBytes(path,data);Assert.False(UpdateProtocol.Verify(path,update));
     }
     [Fact]public async Task CorruptedDownloadIsRemovedAndNeverBecomesInstaller()
     {
         byte[] data=new byte[2048];string folder=Path.Combine(Path.GetTempPath(),"ClipShot.Tests",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);string path=Path.Combine(folder,"setup.exe");
         var update=new AppUpdate(new(9,0,0),new("https://github.com/gromit7/ClipShot/releases/download/v9.0.0/ClipShot-Setup-9.0.0.exe"),data.Length,new string('a',64));
-        using var client=new GitHubUpdates(new Handler(data));await Assert.ThrowsAsync<InvalidDataException>(()=>client.DownloadAsync(update,path,new Progress<int>(),CancellationToken.None));Assert.False(File.Exists(path));Assert.False(File.Exists(path+".partial"));
+        using var client=new GitHubUpdates(new Handler(data),[]){DownloadRetryDelay=TimeSpan.Zero};await Assert.ThrowsAsync<InvalidDataException>(()=>client.DownloadAsync(update,path,new Progress<int>(),CancellationToken.None));Assert.False(File.Exists(path));Assert.False(File.Exists(path+".partial"));
     }
 }

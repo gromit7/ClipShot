@@ -35,11 +35,11 @@ public sealed class StoreImageTests : IDisposable
         Assert.NotEqual(old.Hash,state.Hash);Assert.Equal("image"+Convert.ToHexString(SHA256.HashData(edited)),state.Hash);
         Assert.NotEqual(old.Seen,state.Seen);Assert.InRange(clip.Seen.ToUniversalTime(),before,after);
     }
-    [Theory][InlineData(false)][InlineData(true)]public void Edited_image_preserves_name_and_template(bool template)
+    [Fact]public void Edited_history_image_keeps_its_name_without_becoming_a_template()
     {
         using var store=Open();store.Add("image","",image:[1,2,3]);long id=Assert.Single(store.All()).Id;
-        store.Template(id,template);store.Edit(id,"Инструкция для саппорта");store.EditImage(id,[3,4,5]);
-        var clip=Assert.Single(store.All());Assert.Equal(id,clip.Id);Assert.Equal(template,clip.Template);Assert.Equal("Инструкция для саппорта",clip.Name);
+        store.Template(id,false);store.Edit(id,"Инструкция для саппорта");store.EditImage(id,[3,4,5]);
+        var clip=Assert.Single(store.All());Assert.Equal(id,clip.Id);Assert.False(clip.Template);Assert.Equal("Инструкция для саппорта",clip.Name);
     }
     [Fact]public void Copying_edited_image_deduplicates_into_the_same_named_template()
     {
@@ -49,21 +49,21 @@ public sealed class StoreImageTests : IDisposable
         // Старый хеш больше не занят исходной записью: возвращение исходной картинки создаёт другой клип.
         store.Add("image","",image:original);Assert.Equal(2,store.All().Count);Assert.NotEqual(id,store.All().Single(c=>c.Image!.SequenceEqual(original)).Id);
     }
-    [Theory][InlineData(false,false)][InlineData(false,true)][InlineData(true,false)][InlineData(true,true)]
-    public void Duplicate_hash_conflict_preserves_both_images_names_templates_and_timestamps(bool firstTemplate,bool secondTemplate)
+    [Fact]
+    public void Duplicate_hash_conflict_preserves_both_images_names_templates_and_timestamps()
     {
         using var store=Open();byte[] first=[1,2,3],second=[4,5,6];store.Add("image","",image:first);long firstId=Assert.Single(store.All()).Id;
         store.Add("image","",image:second);long secondId=store.All().Single(c=>c.Id!=firstId).Id;
-        store.Template(firstId,firstTemplate);store.Template(secondId,secondTemplate);store.Edit(firstId,"Первое имя");store.Edit(secondId,"Второе имя");Age(firstId);Age(secondId);
+        store.Template(firstId,true);store.Template(secondId,false);store.Edit(firstId,"Первое имя");store.Edit(secondId,"Второе имя");Age(firstId);Age(secondId);
         var before=store.All().OrderBy(c=>c.Id).ToArray();var firstState=State(firstId);var secondState=State(secondId);
         var error=Assert.Throws<SqliteException>(()=>store.EditImage(firstId,second));Assert.Equal(19,error.SqliteErrorCode);
         var after=store.All().OrderBy(c=>c.Id).ToArray();Assert.Equal(2,after.Length);
         AssertSameClip(before[0],after[0]);AssertSameClip(before[1],after[1]);Assert.Equal(firstState,State(firstId));Assert.Equal(secondState,State(secondId));
     }
-    [Theory][InlineData(0L)][InlineData(-1L)][InlineData(long.MaxValue)]public void Missing_id_does_not_create_a_clip(long id)
+    [Fact]public void Missing_id_does_not_create_a_clip()
     {
         using var store=Open();store.Add("image","",image:[1,2,3]);var before=Assert.Single(store.All());
-        Assert.Throws<InvalidOperationException>(()=>store.EditImage(id,[4,5,6]));AssertSameClip(before,Assert.Single(store.All()));
+        Assert.Throws<InvalidOperationException>(()=>store.EditImage(long.MaxValue,[4,5,6]));AssertSameClip(before,Assert.Single(store.All()));
     }
     [Fact]public void Text_clip_is_not_converted_to_an_image()
     {

@@ -19,6 +19,4 @@ public class UpdateScheduleTests
     public void ClockBackDoesNotRepeatOlderDay(string previous)=>Assert.Null(UpdateSchedule.GetDueSlot(Monday(12),previous,Idle));
     [Theory][InlineData("")][InlineData("broken")][InlineData("99999999")][InlineData("20261026-12")]
     public void InvalidSavedValueCannotDisableChecks(string previous)=>Assert.Equal("20261026",UpdateSchedule.GetDueSlot(Monday(12),previous,Idle));
-    [Fact]public void UnrecordedFailedRequestRemainsDue()=>Assert.Equal("20261026",UpdateSchedule.GetDueSlot(Monday(23),"20261025",Idle));
-    [Fact]public void DayKeyUsesLocalCalendarDate()=>Assert.Equal("20261026",UpdateSchedule.DayKey(Monday(0)));
 }

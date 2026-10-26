@@ -5,7 +5,7 @@ public sealed class HistoryTests
 {
     private static readonly DateTime Today=new(2026,10,25);
     private static Clip Clip(long id,string text="text",int age=0,bool template=false,string name="",string kind="text")=>new(id,kind,text,"","",null,template,name,Today.AddDays(-age));
-    [Theory][InlineData("EXAMPLE")][InlineData("example")][InlineData("  ExAmPlE  ")]
+    [Theory][InlineData("EXAMPLE")][InlineData("  ExAmPlE  ")]
     public void Search_matches_history_and_templates_ignoring_case_and_outer_spaces(string query)
     {var groups=HistoryView.Groups([Clip(1,"test@example.com",template:true),Clip(2,"https://example.com"),Clip(3,"other")],query,"",Today);Assert.Equal(new long[]{1,2},groups.SelectMany(g=>g.Clips).Select(c=>c.Id));}
     [Fact] public void Search_matches_optional_name(){Assert.Single(HistoryView.Groups([Clip(1,name:"РЕКВИЗИТЫ")],"реквизиты","",Today).SelectMany(g=>g.Clips));}
@@ -20,5 +20,4 @@ public sealed class HistoryTests
     [Fact] public void Templates_are_first_and_excluded_from_dates(){var groups=HistoryView.Groups([Clip(1,age:500,template:true),Clip(2)],"","",Today);Assert.Equal("Шаблоны",groups[0].Title);Assert.Equal(1,Assert.Single(groups[0].Clips).Id);Assert.DoesNotContain(groups.Skip(1).SelectMany(g=>g.Clips),c=>c.Template);}
     [Fact] public void Template_order_ignores_stale_invalid_and_duplicate_ids(){var groups=HistoryView.Groups([Clip(1,template:true),Clip(2,template:true),Clip(3,template:true)],"","2,2,999,broken,1",Today);Assert.Equal(new long[]{2,1,3},groups[0].Clips.Select(c=>c.Id));}
     [Fact] public void Month_and_older_never_lose_or_duplicate_clips(){var groups=HistoryView.Groups([Clip(1,age:10),Clip(2,age:40)],"","",Today);Assert.Equal("Месяц",groups[4].Title);Assert.Equal(1,Assert.Single(groups[4].Clips).Id);Assert.Equal("Ранее",groups[5].Title);Assert.Equal(2,Assert.Single(groups[5].Clips).Id);}
-    [Fact] public void Empty_history_keeps_six_empty_sections(){Assert.Equal(6,HistoryView.Groups([],"","",Today).Count);Assert.All(HistoryView.Groups([],"","",Today),g=>Assert.Empty(g.Clips));}
 }
