@@ -115,6 +115,8 @@ internal sealed class RegionCaptureWindow : Window
     {if(test&&lastRegion!=region)throw new InvalidOperationException("Pending selection was not rendered");Finish(frame.Crop(region));}
     internal bool HasSelectionCursor=>surface.HasSelectionCursor;
     internal bool SelectionCursorIsCurrent=>cursor.IsCurrent;
+    internal bool TestPointerInsideClient=>CaptureSelectionCursor.PointerInsideClient(hwnd);
+    internal string TestCursorDiagnostics=>$"HasSelectionCursor={HasSelectionCursor}; PointerInsideClient={TestPointerInsideClient}; {cursor.Diagnostics}";
     private nint CursorMessage(nint window,uint message,nint w,nint l)
     {
         if(message==0x20&&!finished){cursor.Apply();return 1;}

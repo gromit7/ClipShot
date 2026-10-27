@@ -18,16 +18,27 @@ public sealed partial class MainWindow
         try
         {
             byte[] pixels=new byte[800*600*4];for(int y=0;y<600;y++)for(int x=0;x<800;x++){int i=(y*800+x)*4;pixels[i]=(byte)(x%256);pixels[i+1]=(byte)(y%256);pixels[i+2]=100;pixels[i+3]=255;}
-            var source=new ScreenFrame(0,0,800,600,pixels);
+            // SetCursor is thread-local until this window owns mouse input. A
+            // fixed (0,0) fixture could leave the stationary hardware pointer over
+            // another application and incorrectly fail the global cursor check.
+            // Place synthetic pixels under the existing pointer; never move it or
+            // read any screen pixels. Production capture covers the whole desktop.
+            if(!Native.GetCursorPos(out var pointer))throw new InvalidOperationException("Capture test requires an accessible input desktop");
+            var source=new ScreenFrame(checked(pointer.X-400),checked(pointer.Y-300),800,600,pixels);
+            void CursorCheck(RegionCaptureWindow capture,string message)
+            {
+                if(!capture.TestPointerInsideClient)throw new InvalidOperationException("Capture test pointer is outside its actual native client area; "+capture.TestCursorDiagnostics);
+                if(!capture.HasSelectionCursor||!capture.SelectionCursorIsCurrent)throw new InvalidOperationException(message+"; "+capture.TestCursorDiagnostics);
+            }
             nint previousCursor=CaptureSelectionCursor.CurrentHandle;
             var window=new RegionCaptureWindow(source,true);var task=window.SelectAsync();
-            if(!window.HasSelectionCursor||!window.SelectionCursorIsCurrent)throw new InvalidOperationException("Capture cursor was not installed before mouse movement");
+            CursorCheck(window,"Capture cursor was not installed before mouse movement");
             if(!interactive)
             {
                 await Task.Delay(400);
-                if(!window.SelectionCursorIsCurrent)throw new InvalidOperationException("XAML replaced the stationary capture cursor");
+                CursorCheck(window,"XAML replaced the stationary capture cursor");
                 window.PreviewTestSelection(new PixelRegion(25,30,240,160));await Task.Delay(150);
-                if(!window.SelectionCursorIsCurrent)throw new InvalidOperationException("Selection rendering replaced the capture cursor");
+                CursorCheck(window,"Selection rendering replaced the capture cursor");
                 window.CompleteTest(new PixelRegion(25,30,240,160));
             }
             var selection=await task;
@@ -40,7 +51,7 @@ public sealed partial class MainWindow
             store.Add("image","",image:png);Render();
             previousCursor=CaptureSelectionCursor.CurrentHandle;
             var cancelWindow=new RegionCaptureWindow(source,true);var cancel=cancelWindow.SelectAsync();await Task.Delay(100);
-            if(!cancelWindow.HasSelectionCursor||!cancelWindow.SelectionCursorIsCurrent)throw new InvalidOperationException("Repeated capture did not install its cursor");
+            CursorCheck(cancelWindow,"Repeated capture did not install its cursor");
             cancelWindow.Cancel();if(await cancel is not null)throw new InvalidOperationException("Cancel mismatch");
             if(previousCursor!=0&&CaptureSelectionCursor.CurrentHandle!=previousCursor)throw new InvalidOperationException("Cancelled capture did not restore its previous cursor");
             File.WriteAllText(report,$"PASS selection {selection.Width}x{selection.Height}; immediate stationary native/XAML crosshair; cursor preserved during drawing; cursor restored after completion and cancel; PNG roundtrip; history; no desktop or clipboard access");

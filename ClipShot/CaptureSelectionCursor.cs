@@ -34,6 +34,26 @@ internal sealed class CaptureSelectionCursor : IDisposable
         }
     }
     internal static nint CurrentHandle => GetCursor();
+    internal string Diagnostics
+    {
+        get
+        {
+            var info = new CursorInfo { Size = Marshal.SizeOf<CursorInfo>() };
+            bool globalOk = GetCursorInfo(ref info); int error = globalOk ? 0 : Marshal.GetLastWin32Error();
+            nint thread = GetCursor();
+            return $"ThreadHandle=0x{thread:X}; ExpectedHandle=0x{Handle:X}; ThreadMatches={Matches(thread,Handle)}; " +
+                $"GlobalOk={globalOk}; GlobalError={error}; GlobalHandle=0x{info.Handle:X}; Flags=0x{info.Flags:X}; " +
+                $"GlobalMatches={globalOk&&Matches(info.Handle,Handle)}; XamlType={XamlCursor.GetType().Name}";
+        }
+    }
+    internal static bool PointerInsideClient(nint window)
+    {
+        var info = new CursorInfo { Size = Marshal.SizeOf<CursorInfo>() };
+        var origin = new Native.Point();
+        return GetCursorInfo(ref info) && GetClientRect(window, out var client) && Native.ClientToScreen(window, ref origin) &&
+            info.X >= origin.X + client.Left && info.X < (long)origin.X + client.Right &&
+            info.Y >= origin.Y + client.Top && info.Y < (long)origin.Y + client.Bottom;
+    }
     internal void Restore(bool ownedBeforeDetach = false)
     {
         // Deactivation may already have installed another application's cursor.
@@ -105,12 +125,15 @@ internal sealed class CaptureSelectionCursor : IDisposable
     { public int Type, Width, Height, WidthBytes; public ushort Planes, BitsPixel; public nint Bits; }
     [StructLayout(LayoutKind.Sequential)] private struct CursorInfo
     { public int Size; public uint Flags; public nint Handle; public int X, Y; }
+    [StructLayout(LayoutKind.Sequential)] private struct ClientRect
+    { public int Left, Top, Right, Bottom; }
     [UnmanagedFunctionPointer(CallingConvention.StdCall)] private delegate int CreateFromHCursor(nint factory, nint cursor, out nint result);
     [DllImport("combase.dll", CharSet = CharSet.Unicode)] private static extern int WindowsCreateString(string text, int length, out nint value);
     [DllImport("combase.dll")] private static extern int WindowsDeleteString(nint value);
     [DllImport("combase.dll")] private static extern int RoGetActivationFactory(nint name, ref Guid iid, out nint factory);
     [DllImport("user32.dll")] private static extern nint GetCursor();
-    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetCursorInfo(ref CursorInfo info);
+    [DllImport("user32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetCursorInfo(ref CursorInfo info);
+    [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetClientRect(nint window, out ClientRect rect);
     [DllImport("user32.dll", EntryPoint = "LoadCursorW")] private static extern nint LoadCursor(nint instance, nint name);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetIconInfo(nint cursor, out IconInfo info);
     [DllImport("gdi32.dll", EntryPoint = "GetObjectW")] private static extern int GetObject(nint bitmap, int size, out BitmapInfo info);
