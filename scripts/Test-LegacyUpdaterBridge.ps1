@@ -70,6 +70,8 @@ try{
     if((Get-Content -LiteralPath $ready -Raw) -notmatch '^PASS preserved'){throw 'Migration changed synthetic history or templates'}
     $entries=@(Get-Content -LiteralPath $log | ForEach-Object {try{$_ | ConvertFrom-Json}catch{}})
     if(-not($entries | Where-Object {$_.stage -eq 'health.ready'})){throw 'Migration skipped the real startup health handshake'}
+    $noticeProof=Join-Path $data 'startup-notice-checks.txt'
+    if(-not(Test-Path -LiteralPath $noticeProof) -or (Get-Content -LiteralPath $noticeProof -Raw) -notmatch '^PASS '){throw 'Background app did not survive the real update notice lifecycle'}
     $forbidden=Join-Path $root 'UpdatesOther';New-Item -ItemType Directory -Path $forbidden | Out-Null
     $badMarker=Join-Path $forbidden 'health.txt'
     Run $app ('--upgrade-self-test --background --update-health-test --update-health-file="'+$badMarker+'"') $updates

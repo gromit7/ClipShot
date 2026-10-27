@@ -167,9 +167,11 @@ internal static class Program
         if(process is null)return false;
         if(testRoot is not null&&marker is null){using var limit=new CancellationTokenSource(TimeSpan.FromSeconds(60));await process.WaitForExitAsync(limit.Token);return process.ExitCode==0;}
         if(marker is null)return true;
-        for(int i=0;i<600;i++){if(File.Exists(marker)){UpdaterTrace.Write("health.ready");return true;}if(process.HasExited){UpdaterTrace.Write("health.exited");return false;}await Task.Delay(100);}
-        UpdaterTrace.Write("health.timeout");
-        return false;
+        var clock=Stopwatch.StartNew();
+        bool healthy=await UpdateStartupHealth.WaitAsync(()=>File.Exists(marker),()=>process.HasExited,()=>clock.Elapsed,()=>Task.Delay(100));
+        UpdaterTrace.Write(healthy?"health.ready":process.HasExited?"health.exited":"health.timeout");
+        if(process.HasExited)UpdaterTrace.Write("health.exit-code",result:process.ExitCode);
+        return healthy;
     }
     private static FileStream? AcquireLease(){try{return new FileStream(Path.Combine(UpdatesRoot,"updater.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);}catch(IOException){return null;}}
     private static Mutex? AcquireInstallerLease(){var mutex=new Mutex(false,testRoot is null?"Local\\ClipShot.Setup.v1":"Local\\ClipShot.Test.Setup.v1",out bool created);if(created)return mutex;mutex.Dispose();return null;}

@@ -19,5 +19,24 @@ public sealed partial class MainWindow
         }
         catch(Exception e){Environment.ExitCode=1;File.WriteAllText(Path.Combine(dataFolder,"upgrade-checks.txt"),"FAIL "+e.Message);}
         if(!Environment.GetCommandLineArgs().Contains("--wait-for-upgrade"))DispatcherQueue.TryEnqueue(Quit);
+        else if(Environment.GetCommandLineArgs().Contains("--update-health-test"))
+        {
+            // Тот же renderer и жизненный цикл плашки, что после настоящего
+            // обновления, но только с искусственной базой и без системного ввода.
+            var noticeTimer=new Microsoft.UI.Xaml.DispatcherTimer{Interval=TimeSpan.FromMilliseconds(700)};
+            noticeTimer.Tick+=async(_,_)=>
+            {
+                noticeTimer.Stop();
+                try
+                {
+                    var notice=CreateInstalledHistoryNotice(false);
+                    await Task.Delay(1000);notice.Close();
+                    await Task.Delay(1000);
+                    File.WriteAllText(Path.Combine(dataFolder,"startup-notice-checks.txt"),"PASS update notice created and closed while background app remains alive");
+                }
+                catch(Exception e){LifetimeTrace.Write("test.notice-failed",error:e);Environment.ExitCode=1;Quit();}
+            };
+            noticeTimer.Start();
+        }
     }
 }

@@ -122,8 +122,10 @@ public sealed partial class MainWindow : Window
         if(msg==0x0232)EndWindowResize();
         if(msg==0x0112&&((long)w&0xFFF0)==0xF020){DispatcherQueue.TryEnqueue(Hide);return 0;}
         if(msg==App.ShowMessage){DispatcherQueue.TryEnqueue(ShowNearCursor);return 0;}
-        if(msg==App.QuitMessage){DispatcherQueue.TryEnqueue(Quit);return 0;}
-        if(msg==App.UpdateQuitMessage){DispatcherQueue.TryEnqueue(()=>{if(UpdateIdlePolicy.QuitRequestValid(unchecked((uint)Environment.TickCount),(uint)w)&&((long)l==1?CanStartupInstall:CanAutoInstall()))Quit();});return 0;}
+        if(msg==App.QuitMessage){LifetimeTrace.Write("quit.external-message");DispatcherQueue.TryEnqueue(Quit);return 0;}
+        if(msg==App.UpdateQuitMessage){DispatcherQueue.TryEnqueue(()=>{if(UpdateIdlePolicy.QuitRequestValid(unchecked((uint)Environment.TickCount),(uint)w)&&((long)l==1?CanStartupInstall:CanAutoInstall())){LifetimeTrace.Write("quit.update-message");Quit();}});return 0;}
+        if(msg==0x0011)LifetimeTrace.Write("session.query-end");
+        if(msg==0x0016)LifetimeTrace.Write("session.end",code:(int)w);
         if(msg==taskbarCreated&&(!isolated||shellTest)){DispatcherQueue.TryEnqueue(()=>{trayReady=false;CreateTray();});return 0;}
         if(msg==App.MicrophoneMessage){DispatcherQueue.TryEnqueue(()=>RefreshMicrophone(true));return 0;}
         if(msg==0x031D && !isolated) { DispatcherQueue.TryEnqueue(()=>Capture()); }
@@ -185,6 +187,7 @@ public sealed partial class MainWindow : Window
     private void Quit()
     {
         if(exiting)return;
+        LifetimeTrace.Write("quit.request");
         if(clipdiaryImportRunning){if(!quitAfterClipdiaryImport)_=CancelImportAndQuit();return;}
         if(templatePointerRow is not null)EndTemplateDrag();EndWindowPointerGesture();exiting=true;CancelPanelFade();activeDialog?.Hide();sectionFocusTimer.Stop();sectionPopup.IsOpen=false;StopUpdates();StopMicrophone();hoverTimer.Stop();leaveTimer.Stop();cleanupTimer.Stop();
         captureWindow?.Cancel();

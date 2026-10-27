@@ -4,6 +4,7 @@ public partial class App : Application
 {
     private MainWindow? window;
     private Mutex? singleInstance;
+    private readonly DispatcherTimer lifetimeTimer=new(){Interval=TimeSpan.FromMinutes(5)};
     internal static readonly bool Isolated = TestEnvironment.IsIsolated(Environment.GetCommandLineArgs());
     internal static readonly uint ShowMessage=Native.RegisterWindowMessage(TestEnvironment.MessageName(Isolated,"Show"));
     internal static readonly uint QuitMessage=Native.RegisterWindowMessage(TestEnvironment.MessageName(Isolated,"Quit"));
@@ -12,6 +13,8 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        LifetimeTrace.Initialize(TestEnvironment.DataFolder(Isolated,Environment.GetEnvironmentVariable("CLIPSHOT_TEST_ROOT")));
+        UnhandledException+=(_,e)=>LifetimeTrace.Write("xaml.unhandled",error:e.Exception);
         if(Isolated)
             UnhandledException+=(_,e)=>{var folder=TestEnvironment.DataFolder(true,Environment.GetEnvironmentVariable("CLIPSHOT_TEST_ROOT"));Directory.CreateDirectory(folder);File.WriteAllText(Path.Combine(folder,"test-error.txt"),e.Exception.ToString());Environment.ExitCode=1;};
     }
@@ -23,13 +26,17 @@ public partial class App : Application
         singleInstance = new Mutex(true, isolated?"Local\\ClipNest.Test.v1":"Local\\ClipNest.Local.v1", out bool first);
         if (!first) { if(command.Contains("--toggle-microphone")){Native.PostMessage((nint)0xffff,MicrophoneMessage,0,0);Exit();return;}if(!command.Contains("--background"))Native.PostMessage((nint)0xffff,ShowMessage,0,0);Exit(); return; }
         window = new MainWindow(isolated);
+        LifetimeTrace.Write("window.created");
+        window.Closed+=(_,_)=>{lifetimeTimer.Stop();LifetimeTrace.Write("window.closed");};
+        lifetimeTimer.Tick+=(_,_)=>LifetimeTrace.Write("dispatcher.alive");
+        lifetimeTimer.Start();
         var health=command.FirstOrDefault(a=>a.StartsWith("--update-health-file="));
         if(health is not null&&(!isolated||(command.Contains("--update-health-test")&&!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CLIPSHOT_TEST_ROOT")))))
         {
             string marker=Path.GetFullPath(health["--update-health-file=".Length..]);
             // Тестовая health-ветка остаётся внутри проверенного TEMP/ClipShot.Tests.
             string updates=isolated?Path.GetFullPath(Path.Combine(TestEnvironment.DataFolder(true,Environment.GetEnvironmentVariable("CLIPSHOT_TEST_ROOT")),"..","Updates"))+Path.DirectorySeparatorChar:Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ClipNest","Updates")+Path.DirectorySeparatorChar;
-            if(marker.StartsWith(updates,StringComparison.OrdinalIgnoreCase))File.WriteAllText(marker,"ready");
+            if(marker.StartsWith(updates,StringComparison.OrdinalIgnoreCase)){File.WriteAllText(marker,"ready");LifetimeTrace.Write("update.ready-marker");}
         }
         if(command.Contains("--toggle-microphone"))Native.PostMessage((nint)0xffff,MicrophoneMessage,0,0);
         if (Environment.GetCommandLineArgs().Contains("--background")) window.AppWindow.Hide();
