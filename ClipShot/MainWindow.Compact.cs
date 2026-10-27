@@ -5,7 +5,7 @@ using Windows.Graphics;
 namespace ClipShot;
 public sealed partial class MainWindow
 {
-    private bool buildingTemplates,compactResizing,preserveCollapsedPosition;
+    private bool buildingTemplates,compactResizing,preserveCollapsedPosition,preserveExpandedDragPosition;
     private int compactGroupCount=-1,openMenus;
     private readonly Dictionary<string,FrameworkElement> sectionHeadings=[];
     private readonly DispatcherTimer panelFadeTimer=new(){Interval=TimeSpan.FromMilliseconds(16)};
@@ -53,6 +53,9 @@ public sealed partial class MainWindow
     }
     private void FitCompactPanel(List<ClipGroup> groups)
     {
+        // Сворачивание завершает ручное размещение раскрытой панели и возвращает
+        // обычную привязку. Сам auto-fit не должен отменять законченный drag.
+        if(AllSectionsCollapsed)preserveExpandedDragPosition=false;
         EnsureInlineSizing();
         if(InlineLayout){compactGroupCount=-1;QueueInlinePanelFit();return;}
         int count=groups.Count(g=>g.Clips.Count>0);
@@ -89,7 +92,8 @@ public sealed partial class MainWindow
         try
         {
             Root.UpdateLayout();
-            var area=DisplayArea.Primary.WorkArea;
+            bool manualPosition=preserveExpandedDragPosition||(preserveCollapsedPosition&&AllSectionsCollapsed);
+            var area=manualPosition?DisplayArea.GetFromWindowId(AppWindow.Id,DisplayAreaFallback.Nearest).WorkArea:DisplayArea.Primary.WorkArea;
             if(area.Width<=0||area.Height<=0)return;
             double scale=Root.XamlRoot.RasterizationScale;
             if(!double.IsFinite(scale)||scale<=0)return;
@@ -103,7 +107,7 @@ public sealed partial class MainWindow
             Root.InvalidateMeasure();
             if(!double.IsFinite(contentHeight))return;
             var bounds=InlinePanelPlacement.Choose(width,AppWindow.Position.Y,area.X,area.Y,area.Width,area.Height,contentHeight,scale,chromeHeight);
-            if(preserveCollapsedPosition&&AllSectionsCollapsed)
+            if(manualPosition)
                 bounds=bounds with{X=Math.Clamp(AppWindow.Position.X,area.X,area.X+area.Width-bounds.Width)};
             if(AppWindow.Position.X==bounds.X&&AppWindow.Position.Y==bounds.Y&&AppWindow.Size.Width==bounds.Width&&AppWindow.Size.Height==bounds.Height)return;
             compactResizing=true;

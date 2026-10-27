@@ -11,6 +11,9 @@ public sealed partial class MainWindow
         void Check(bool ok,string name)=>results.Add($"{(ok?"PASS":"FAIL")} {name}");
         var position=AppWindow.Position;var size=AppWindow.Size;
         string autofit=store.Get("panelautofit","1");
+        string layout=store.Get("sectionlayout","side");
+        bool manualCollapsed=preserveCollapsedPosition,manualExpanded=preserveExpandedDragPosition,initialized=sectionInitialized;
+        string? originalSection=activeSection;var originalExpanded=expanded.ToDictionary(pair=>pair.Key,pair=>pair.Value);
         const uint pointerId=701;
         Native.Point start=new(){X=300,Y=300};
         try
@@ -47,15 +50,32 @@ public sealed partial class MainWindow
 
             BeginWindowPointerGesture(WindowPointerGesture.Move,start,pointerId);Hide();
             Check(windowPointerGesture==WindowPointerGesture.None&&!windowGestureTimer.IsEnabled&&!AppWindow.IsVisible,"hiding cancels an active gesture and its button watchdog");
-            ShowNearCursor();CollapseSection();suppressedHoverSection=null;Render();
-            QueueSectionHover("Сегодня",sectionHeadings["Сегодня"]);
-            long deadline=Environment.TickCount64+1800;
-            while(!sectionPopup.IsOpen&&Environment.TickCount64<deadline)await Task.Delay(20);
-            Check(sectionPopup.IsOpen&&activeSection=="Сегодня"&&!windowResizing,"section hover works again after a drag was cancelled");
+            ShowNearCursor();CollapseSection();Render();ToggleSection("Сегодня");await Task.Delay(100);
+            Check(sectionPopup.IsOpen&&activeSection=="Сегодня"&&!windowResizing,"section click works again after a drag was cancelled");
+
+            store.Set("sectionlayout","inline");CollapseSearch();expanded["Сегодня"]=true;expanded["Шаблоны"]=false;
+            preserveCollapsedPosition=false;preserveExpandedDragPosition=false;Render();await Task.Delay(120);FitInlinePanel();
+            var docked=AppWindow.Position;
+            BeginWindowPointerGesture(WindowPointerGesture.Move,start,pointerId);
+            UpdateWindowPointerGesture(new(){X=start.X-32,Y=start.Y},true);
+            var moved=AppWindow.Position;
+            QueueInlinePanelFit();FitInlinePanel();DockCollapsedPanel();
+            Check(AppWindow.Position.X==moved.X&&AppWindow.Position.Y==moved.Y,"queued layout and docking cannot move the window during an active drag");
+            EndWindowPointerGesture(pointerId);await Task.Delay(120);FitInlinePanel();await Task.Delay(60);
+            Check(moved.X==docked.X-32&&AppWindow.Position.X==moved.X&&AppWindow.Position.Y==moved.Y&&preserveExpandedDragPosition,"expanded inline panel keeps its manual position after release instead of snapping back during auto-fit");
+
+            foreach(string title in expanded.Keys.ToArray())expanded[title]=false;
+            Render();await Task.Delay(140);FitInlinePanel();DockCollapsedPanel();
+            var area=Microsoft.UI.Windowing.DisplayArea.Primary.WorkArea;
+            Check(!preserveExpandedDragPosition&&AppWindow.Position.X+AppWindow.Size.Width==area.X+area.Width&&AppWindow.Position.Y+AppWindow.Size.Height==area.Y+area.Height,"collapsing sections restores the primary bottom-right docking after a manual expanded move");
+            preserveCollapsedPosition=false;BeginWindowPointerGesture(WindowPointerGesture.Move,start,pointerId);EndWindowPointerGesture(pointerId);
+            Check(!preserveCollapsedPosition,"a press without movement does not detach a collapsed panel from automatic docking");
         }
         finally
         {
-            EndWindowPointerGesture();AppWindow.Move(position);AppWindow.Resize(size);
+            EndWindowPointerGesture();expanded.Clear();foreach(var pair in originalExpanded)expanded[pair.Key]=pair.Value;
+            store.Set("sectionlayout",layout);activeSection=originalSection;sectionInitialized=initialized;
+            preserveCollapsedPosition=manualCollapsed;preserveExpandedDragPosition=manualExpanded;Render();AppWindow.Move(position);AppWindow.Resize(size);
             await Task.Delay(80);
             store.SetMany(new Dictionary<string,string>{{"panelautofit",autofit},{"width",size.Width.ToString()},{"height",size.Height.ToString()}});
             PositionSection();
