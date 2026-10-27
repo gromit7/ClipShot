@@ -266,8 +266,8 @@ public sealed partial class MainWindow : Window
         if(exiting)return;
         try
         {
-            await ShowCopyFeedback(clip.Id);if(exiting)return;
-            if(isolated){store.Add(clip.Kind,clip.Text,clip.Html,clip.Rtf,clip.Image);CollapseSection();Render();return;}
+            var feedback=ShowCopyFeedback(clip.Id);
+            if(isolated){store.Add(clip.Kind,clip.Text,clip.Html,clip.Rtf,clip.Image);await feedback;if(exiting)return;CollapseSection();Render();return;}
             var data=new DataPackage();data.RequestedOperation=DataPackageOperation.Copy;
             if(clip.Image is not null)
             {
@@ -280,7 +280,8 @@ public sealed partial class MainWindow : Window
             }
             ownSequence=Native.GetClipboardSequenceNumber();
             // Choosing an existing clip is a new use, without recording a duplicate.
-            store.Add(clip.Kind,clip.Text,clip.Html,clip.Rtf,clip.Image);CollapseSection();Render();
+            store.Add(clip.Kind,clip.Text,clip.Html,clip.Rtf,clip.Image);
+            await feedback;if(exiting)return;CollapseSection();Render();
             if(store.Get("autopaste","0")=="1")await TryPastePrevious();else FocusPanel();
         }
         catch {Status.Text=T("Не удалось скопировать. Повторите выбор.");}
