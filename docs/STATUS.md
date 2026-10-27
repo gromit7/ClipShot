@@ -295,6 +295,7 @@ GitHub latest/tag — v0.7.9. Независимый read-only аудит под
 | --- | ---: | --- |
 | ClipShot-Win10-Setup-0.7.9.exe | 88327251 | 0a73efb5ddc518b781c87b8f17ec6d1952b8a2e0b4c3d3d57dfc37edfd9c216f |
 | ClipShot-Win11-Setup-0.7.9.exe | 88322020 | cb6a75203ed7b6eeec15ba111980b78c37d21919cd84d2469a69f67d9b9b84be |
-| Legacy для старых клиентов и ZIP | 88303595 | 9d316f76534ae5e8aad8ba9e0d6b5f8b3916390d3f12fb80e75856de343a340f |
+
+Legacy-пакет для старых клиентов и ZIP находится на GitHub и зеркалах, не на D: 88303595 байт, SHA-256 9d316f76534ae5e8aad8ba9e0d6b5f8b3916390d3f12fb80e75856de343a340f.
 
 Публичные тег и бинарники неизменяемы. Репозиторий пока PUBLIC. VPN, маршруты, SSH, firewall, службы и nginx в этом выпуске не менялись.
