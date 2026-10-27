@@ -13,7 +13,7 @@ public sealed partial class MainWindow
         // Invoke the same accessible button command used by mouse click and keyboard.
         void Click(string title)
         {
-            var peer=new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(sectionHeadings[title]);
+            var peer=new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer((Button)sectionHeadings[title]);
             ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
         }
         var original=store.All().Select(c=>(c.Id,c.Template,c.Seen,c.Text)).ToArray();
