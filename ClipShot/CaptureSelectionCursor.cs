@@ -84,7 +84,10 @@ internal sealed class CaptureSelectionCursor : IDisposable
     public void Dispose()
     {
         if (disposed) return;
-        Restore(); disposed = true; XamlCursor.Dispose(); Native.DestroyCursor(Handle); Handle = 0;
+        Restore(); disposed = true;
+        try { XamlCursor.Dispose(); }
+        catch (ObjectDisposedException) { }
+        finally { Native.DestroyCursor(Handle); Handle = 0; }
     }
 
     private static InputCursor FromHandle(nint cursor)

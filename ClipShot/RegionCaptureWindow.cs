@@ -6,7 +6,6 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Shapes;
-using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Content;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.Foundation;
@@ -42,13 +41,13 @@ internal sealed class RegionCaptureWindow : Window
     private readonly Border sizeBadge;
     private PixelRegion? pendingRegion,lastRegion;
     private readonly TaskCompletionSource<ScreenFrame?> completion=new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource<bool> surfaceReady=new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int startX,startY;private bool dragging,finished;
     private readonly bool test;
     public RegionCaptureWindow(ScreenFrame frame,bool test=false,UiText? language=null)
     {
         words=language??new UiText("ru");this.frame=frame;this.test=test;Title=words.Translate("ClipShot — выделение области");
         cursor=new CaptureSelectionCursor(System.IO.Path.Combine(AppContext.BaseDirectory,"Assets","Selection.cur"));
-        surface.SetSelectionCursor(cursor.XamlCursor);
         hwnd=WinRT.Interop.WindowNative.GetWindowHandle(this);cursorProcedure=CursorMessage;
         previousProcedure=Native.SetWindowLongPtr(hwnd,-4,System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(cursorProcedure));
         sizeBadge=new Border{Child=dimensions,Padding=new Thickness(9,5,9,5),Background=new SolidColorBrush(Windows.UI.Color.FromArgb(245,24,24,24)),BorderBrush=new SolidColorBrush(Microsoft.UI.Colors.White),BorderThickness=new Thickness(1),CornerRadius=new CornerRadius(4),Visibility=Visibility.Collapsed};
@@ -68,7 +67,9 @@ internal sealed class RegionCaptureWindow : Window
             surface.SetSelectionCursor(null);surface.SetSelectionCursor(cursor.XamlCursor);
             try
             {
-                captureIsland=ContentIsland.GetByVisual(ElementCompositionPreview.GetElementVisual(surface));
+                // A child XAML visual is not the island's root visual:
+                // GetByVisual(child) can return null. Use XamlRoot's input owner.
+                captureIsland=surface.XamlRoot?.ContentIsland;
                 if(captureIsland is not null)
                 {
                     islandPointerSource=InputPointerSource.GetForIsland(captureIsland);
@@ -86,7 +87,7 @@ internal sealed class RegionCaptureWindow : Window
                 else islandCursorBinding="IslandUnavailable";
             }
             catch(System.Runtime.InteropServices.COMException error){islandCursorBinding=$"Error0x{error.HResult:X8}";}
-            cursor.Apply();
+            cursor.Apply();surfaceReady.TrySetResult(true);
         };
         CompositionTarget.Rendering+=RenderPending;
         surface.PointerCaptureLost+=(_,_)=>{if(dragging){dragging=false;Reset();}};
@@ -95,12 +96,23 @@ internal sealed class RegionCaptureWindow : Window
         {
             CompositionTarget.Rendering-=RenderPending;
             bool ownedCursor=cursor.IsCurrent;
-            surface.SetSelectionCursor(null);
-            try{if(captureIsland is {IsClosed:false}&&islandPointerSource is not null)islandPointerSource.Cursor=null;}
-            catch(System.Runtime.InteropServices.COMException){} // The window may already have closed its input site.
-            islandPointerSource=null;captureIsland=null;
-            Native.SetWindowLongPtr(hwnd,-4,previousProcedure);
-            cursor.Restore(ownedCursor);cursor.Dispose();finished=true;completion.TrySetResult(null);
+            try
+            {
+                surface.SetSelectionCursor(null);
+                if(captureIsland is {IsClosed:false}&&islandPointerSource is not null)islandPointerSource.Cursor=null;
+            }
+            // The input site can close between IsClosed and Cursor=null.
+            // CsWinRT maps RO_E_CLOSED to ObjectDisposedException.
+            catch(System.Runtime.InteropServices.COMException){}
+            catch(ObjectDisposedException){}
+            finally
+            {
+                islandPointerSource=null;captureIsland=null;
+                Native.SetWindowLongPtr(hwnd,-4,previousProcedure);
+                cursor.Restore(ownedCursor);
+                try{cursor.Dispose();}
+                finally{finished=true;surfaceReady.TrySetCanceled();completion.TrySetResult(null);}
+            }
         };
         Activated+=(_,e)=>{if(e.WindowActivationState==WindowActivationState.Deactivated&&!test)Cancel();else if(e.WindowActivationState!=WindowActivationState.Deactivated&&!finished)cursor.Apply();};
     }
@@ -150,6 +162,7 @@ internal sealed class RegionCaptureWindow : Window
     internal void CompleteTest(PixelRegion region)
     {if(test&&lastRegion!=region)throw new InvalidOperationException("Pending selection was not rendered");Finish(frame.Crop(region));}
     internal bool HasSelectionCursor=>surface.HasSelectionCursor;
+    internal Task TestSurfaceReady=>surfaceReady.Task;
     internal bool SelectionCursorIsCurrent=>cursor.IsCurrent;
     internal bool TestPointerInsideClient=>CaptureSelectionCursor.PointerInsideClient(hwnd);
     internal bool TestOwnsPointer=>CaptureSelectionCursor.PointerOwnedBy(hwnd);

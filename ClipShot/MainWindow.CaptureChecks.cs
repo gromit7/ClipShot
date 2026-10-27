@@ -33,6 +33,9 @@ public sealed partial class MainWindow
             }
             nint previousCursor=CaptureSelectionCursor.CurrentHandle;
             var window=new RegionCaptureWindow(source,true);var task=window.SelectAsync();
+            // Check the first loaded surface, not an HWND whose XAML input site
+            // has not been created yet. No pointer movement or cursor test repair.
+            await window.TestSurfaceReady.WaitAsync(TimeSpan.FromSeconds(2));
             CursorCheck(window,"Capture cursor was not installed before mouse movement");
             if(!interactive)
             {
@@ -51,7 +54,8 @@ public sealed partial class MainWindow
             if(!interactive&&(selection.Width!=240||selection.Height!=160))throw new InvalidOperationException("Crop mismatch");
             store.Add("image","",image:png);Render();
             previousCursor=CaptureSelectionCursor.CurrentHandle;
-            var cancelWindow=new RegionCaptureWindow(source,true);var cancel=cancelWindow.SelectAsync();await Task.Delay(100);
+            var cancelWindow=new RegionCaptureWindow(source,true);var cancel=cancelWindow.SelectAsync();
+            await cancelWindow.TestSurfaceReady.WaitAsync(TimeSpan.FromSeconds(2));await Task.Delay(100);
             CursorCheck(cancelWindow,"Repeated capture did not install its cursor");
             cancelWindow.Cancel();if(await cancel is not null)throw new InvalidOperationException("Cancel mismatch");
             if(previousCursor!=0&&CaptureSelectionCursor.CurrentHandle!=previousCursor)throw new InvalidOperationException("Cancelled capture did not restore its previous cursor");
