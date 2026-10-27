@@ -175,7 +175,7 @@ public sealed partial class MainWindow : Window
         }
         AppWindow.Show();Activate();Native.SetForegroundWindow(hwnd);FocusPanel();PositionSection();WatchPanelFocus();ShowUpdateOffer();DockCollapsedPanel();
     }
-    private void Hide(){if(templatePointerRow is not null)EndTemplateDrag();EndWindowPointerGesture();CancelSectionHover();ForgetSectionAutoClose();CancelPanelFade();activeDialog?.Hide();sectionFocusTimer.Stop();sectionPopup.IsOpen=false;preview.IsOpen=false;hoverTimer.Stop();leaveTimer.Stop();AppWindow.Hide();CollapseSearch(false);}
+    private void Hide(){if(templatePointerRow is not null)EndTemplateDrag();EndWindowPointerGesture();CancelPanelFade();activeDialog?.Hide();sectionFocusTimer.Stop();sectionPopup.IsOpen=false;preview.IsOpen=false;hoverTimer.Stop();leaveTimer.Stop();AppWindow.Hide();CollapseSearch(false);}
     private void ToggleVisibility()
     {
         if(exiting||takingScreenshot)return;
@@ -186,7 +186,7 @@ public sealed partial class MainWindow : Window
     {
         if(exiting)return;
         if(clipdiaryImportRunning){if(!quitAfterClipdiaryImport)_=CancelImportAndQuit();return;}
-        if(templatePointerRow is not null)EndTemplateDrag();EndWindowPointerGesture();exiting=true;CancelSectionHover();CancelPanelFade();activeDialog?.Hide();sectionFocusTimer.Stop();sectionPopup.IsOpen=false;StopUpdates();StopMicrophone();hoverTimer.Stop();leaveTimer.Stop();cleanupTimer.Stop();
+        if(templatePointerRow is not null)EndTemplateDrag();EndWindowPointerGesture();exiting=true;CancelPanelFade();activeDialog?.Hide();sectionFocusTimer.Stop();sectionPopup.IsOpen=false;StopUpdates();StopMicrophone();hoverTimer.Stop();leaveTimer.Stop();cleanupTimer.Stop();
         captureWindow?.Cancel();
         editor?.Close();
         if(!isolated)Native.RemoveClipboardFormatListener(hwnd);
@@ -201,7 +201,7 @@ public sealed partial class MainWindow : Window
         // remains in another application. Foreground ownership is not visibility.
         bool keepWindow=AppWindow.IsVisible||activeDialog is not null;
         bool restoreEditor=editor is {IsClosed:false}&&editor.AppWindow.IsVisible;
-        CancelSectionHover();CancelPanelFade();
+        CancelPanelFade();
         takingScreenshot=true;
         try
         {
@@ -294,9 +294,9 @@ public sealed partial class MainWindow : Window
         templateRenderPending=false;rendering=true;
         try
         {
-            CancelSectionHover();hoverTimer.Stop();preview.IsOpen=false;hovered=null;
+            hoverTimer.Stop();preview.IsOpen=false;hovered=null;
             long? previousId=selected>=0&&selected<visible.Count?visible[selected].Clip.Id:null;
-            Groups.Children.Clear();TemplateGroups.Children.Clear();sectionHeadings.Clear();sectionAutoCloseRows.Clear();ResetTemplateRenderState();clipPressOverlays.Clear();visible.Clear();
+            Groups.Children.Clear();TemplateGroups.Children.Clear();sectionHeadings.Clear();ResetTemplateRenderState();clipPressOverlays.Clear();visible.Clear();
             string query=Search.Text.Trim();
             var groups=HistoryView.Groups(store.All(),query,store.Get("templateorder",""),DateTime.Today);
             // Поиск сохраняет приоритет шаблонов; в панели их постоянное место — внизу.
@@ -330,10 +330,10 @@ public sealed partial class MainWindow : Window
         var calmBase=((SolidColorBrush)ClipBrush("ClipHeaderBrush")).Color;var calmSelection=((SolidColorBrush)ClipBrush("ClipSelectionBrush")).Color;
         byte Blend(byte a,byte b)=>(byte)(a+(b-a)*.35);
         var calmHover=new SolidColorBrush(Windows.UI.Color.FromArgb(255,Blend(calmBase.R,calmSelection.R),Blend(calmBase.G,calmSelection.G),Blend(calmBase.B,calmSelection.B)));
-        button.PointerEntered+=(_,_)=>{hoverTimer.Stop();hovered=null;preview.IsOpen=false;headerBackground.Background=calmHover;ObserveOpenSectionPointer(title);QueueSectionHover(title,button,pointerObserved:true);};
-        button.PointerExited+=(_,_)=>{headerBackground.Background=ClipBrush("ClipHeaderBrush");LeaveSectionHover(title,button);};
+        button.PointerEntered+=(_,_)=>{hoverTimer.Stop();hovered=null;preview.IsOpen=false;headerBackground.Background=calmHover;};
+        button.PointerExited+=(_,_)=>{headerBackground.Background=ClipBrush("ClipHeaderBrush");};
         button.Click+=(_,_)=>ToggleSection(title);ClipRows.Children.Add(new Border{Child=button,BorderBrush=ClipBrush("ClipSeparatorBrush"),BorderThickness=new Thickness(0,0,0,1)});
-        if(!buildingSection){sectionHeadings[title]=button;RegisterSectionAutoCloseGroup(title);}
+        if(!buildingSection){sectionHeadings[title]=button;}
         if(!open||SideSections&&!buildingSection)return;
         bool templateSearch=Search.Text.Trim().Length>0;
         foreach(var clip in TemplateRenderClips(title,clips,templateSearch))
@@ -361,10 +361,10 @@ public sealed partial class MainWindow : Window
             var contents=new Grid();contents.Children.Add(grid);contents.Children.Add(indicator);
             var row=new Border{Child=contents,Tag=indicator,BorderBrush=ClipBrush("ClipSeparatorBrush"),BorderThickness=new Thickness(0,0,0,1),Background=new SolidColorBrush(Microsoft.UI.Colors.Transparent),BackgroundTransition=new BrushTransition{Duration=TimeSpan.FromMilliseconds(140)}};
             AttachClipFeedback(row,contents);
-            int index=visible.Count;visible.Add((clip,row));ClipRows.Children.Add(row);if(!buildingSection)RegisterSectionAutoCloseRow(title,row);
+            int index=visible.Count;visible.Add((clip,row));ClipRows.Children.Add(row);
             AttachTemplateClipDrag(clip,row,templateSearch);
             row.Tapped+=async(_,e)=>{if(!IsButtonSource(e.OriginalSource)&&(!clip.Template||!SuppressTemplateTap()))await Copy(clip);};
-            row.PointerEntered+=(_,_)=>{ObserveOpenSectionPointer(title);selected=index;Highlight();hovered=clip;hoverAnchor=row;hoverTimer.Stop();hoverTimer.Start();};
+            row.PointerEntered+=(_,_)=>{selected=index;Highlight();hovered=clip;hoverAnchor=row;hoverTimer.Stop();hoverTimer.Start();};
             row.PointerExited+=(_,_)=>{hoverTimer.Stop();hovered=null;leaveTimer.Start();};
             var menu=new MenuFlyout();TrackMenu(menu);
             void Item(string title,Action action){var item=new MenuFlyoutItem{Text=T(title)};item.Click+=(_,_)=>action();menu.Items.Add(item);}

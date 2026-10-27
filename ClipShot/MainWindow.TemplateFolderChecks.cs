@@ -67,7 +67,7 @@ public sealed partial class MainWindow
             store.Set("sectionlayout","inline");Render();await Settle();
             Check(IsTemplateFolderKeySource(templateFolderButtons[folder.Id])&&templateFolderButtons[folder.Id].Content is Grid,"folder header has a keyboard source guard so Enter and Space cannot copy a selected clip");
             ToggleTemplateFolder(folder.Id);await Settle();
-            Check(visible.All(item=>item.Clip.Id!=a&&item.Clip.Id!=b)&&sectionAutoCloseRows["Шаблоны"].Contains(templateFolderHeaderRows[folder.Id]),"a collapsed folder hides its child rows while its header remains inside the protected template hit area");
+            Check(visible.All(item=>item.Clip.Id!=a&&item.Clip.Id!=b)&&Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(templateFolderHeaderRows[folder.Id]) is not null,"a collapsed folder hides its child rows while its header remains inside the visible template list");
             ToggleTemplateFolder(folder.Id);await Settle();
             await ApplyTemplateDrop(keyC,keyA,TemplateDropZone.Inside);await Settle();
             Check(store.GetTemplateLayout().Folders.Single(item=>item.Id==folder.Id).ClipIds.SequenceEqual(new[]{b,a,c}),"dropping onto a child joins its existing folder without nesting");
@@ -81,7 +81,7 @@ public sealed partial class MainWindow
                 $"search flattens matched template clips and disables dragging (query={Search.Text}; visibility={Search.Visibility}; folders={templateFolderButtons.Count}; matched={matched}; canDrag={dragging})");
             Search.Text="";Render();await Settle();
             templateDragInProgress=true;
-            Check(UpdateOperationBusy&&!CanOpenSectionOnHover&&!CanDismissPanel&&SuppressTemplateTap(),"an active template drag protects automatic installation, hover closing and accidental copying");
+            Check(UpdateOperationBusy&&!CanDismissPanel&&SuppressTemplateTap(),"an active template drag protects automatic installation, panel dismissal and accidental copying");
             var sourceRow=visible.First(item=>item.Clip.Id==a).Row;Render();
             Check(templateRenderPending&&ReferenceEquals(sourceRow,visible.First(item=>item.Clip.Id==a).Row),"clipboard or theme redraw during an internal drag is deferred without replacing its source row");
             EndTemplateDrag();Check(!templateDragInProgress&&SuppressTemplateTap(),"a short post-drag tap guard prevents a completed drag from copying a clip");await Settle();

@@ -108,7 +108,7 @@ public sealed partial class MainWindow
             // still a real drag, but there is no down pointer left to capture.
             if(primaryDown&&templatePointer is not null)row.CapturePointer(templatePointer);
             templateDragInProgress=true;templateDraggedEntry=source;templateTapSuppressedUntil=long.MaxValue;
-            hoverTimer.Stop();leaveTimer.Stop();hovered=null;preview.IsOpen=false;CancelSectionHover();CancelPanelFade();
+            hoverTimer.Stop();leaveTimer.Stop();hovered=null;preview.IsOpen=false;CancelPanelFade();
         }
         var target=FindTemplatePointerTarget(point);
         ShowTemplatePointerTarget(target);

@@ -18,9 +18,7 @@ public sealed partial class MainWindow
     private bool sectionFocusTimerReady;
     private void CollapseSection()
     {
-        CancelSectionHover();
         if(!SideSections)return;
-        ForgetSectionAutoClose();
         activeSection=null;sectionInitialized=true;sectionPopup.IsOpen=false;preview.IsOpen=false;hoverTimer.Stop();hovered=null;
     }
     private void DismissSectionForExternalFocus(bool external)
@@ -79,8 +77,7 @@ public sealed partial class MainWindow
     }
     private void ToggleSection(string title)
     {
-        ForgetSectionAutoClose(title);
-        CancelSectionHover();suppressedHoverSection=title;
+        // Heading activation is the only pointer action that changes a section.
         if(SideSections){activeSection=activeSection==title?null:title;sectionInitialized=true;Render();FocusPanel();}
         else{expanded[title]=!expanded.GetValueOrDefault(title);Render();}
     }

@@ -58,7 +58,6 @@ public sealed partial class MainWindow
         var button=new Button{Content=label,Tag=new TemplateFolderButton(folder.Id),HorizontalAlignment=HorizontalAlignment.Stretch,HorizontalContentAlignment=HorizontalAlignment.Stretch,
             Padding=new Thickness(20,9,12,9),CornerRadius=new CornerRadius(0),BorderThickness=new Thickness(0),Background=ClipBrush("ClipHeaderBrush")};
         button.Click+=(_,_)=>{if(!SuppressTemplateTap())ToggleTemplateFolder(folder.Id);};
-        button.PointerEntered+=(_,_)=>ObserveOpenSectionPointer("Шаблоны");
         var border=new Border{Child=button,BorderBrush=ClipBrush("ClipSeparatorBrush"),BorderThickness=new Thickness(0,0,0,1)};
         var menu=new MenuFlyout();TrackMenu(menu);
         void Item(string text,Action action){var item=new MenuFlyoutItem{Text=T(text)};item.Click+=(_,_)=>action();menu.Items.Add(item);}
@@ -67,7 +66,6 @@ public sealed partial class MainWindow
         Item("Переместить ниже",()=>MoveTemplateEntryByOffset(TemplateFolderKey(folder.Id),1));
         Item("Разобрать папку",()=>UngroupTemplateFolder(folder.Id));button.ContextFlyout=menu;
         AttachTemplateDrag(border,TemplateFolderKey(folder.Id));ClipRows.Children.Add(border);templateFolderButtons[folder.Id]=button;templateFolderHeaderRows[folder.Id]=border;
-        if(!buildingSection)RegisterSectionAutoCloseRow("Шаблоны",border);
     }
     private static bool IsTemplateFolderKeySource(DependencyObject? source)
     {

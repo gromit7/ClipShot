@@ -9,7 +9,7 @@ public sealed partial class MainWindow
 
     private void OpenSearchClick(object sender,RoutedEventArgs e)
     {
-        CancelSectionHover();
+
         Search.Visibility=Visibility.Visible;
         SearchClose.Visibility=Visibility.Visible;
         Search.Focus(FocusState.Programmatic);
