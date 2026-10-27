@@ -514,7 +514,7 @@ public sealed partial class MainWindow : Window
                 }
             }
         };
-        var result=await ShowDialogAsync(dialog);
+        var result=await ShowDialogAsync(dialog,dismissOnExternalFocus:true);
         if(exiting||result!=ContentDialogResult.Primary)return;
         store.Set("shiftprint",shiftPrint.IsChecked==true?"1":"0");if(!isolated)RegisterScreenshotAlias();
         store.Set("sectionlayout",sectionLayout.SelectedIndex==1?"inline":"side");

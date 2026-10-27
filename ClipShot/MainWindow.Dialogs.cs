@@ -5,10 +5,19 @@ namespace ClipShot;
 public sealed partial class MainWindow
 {
     private ContentDialog? activeDialog;
-    private async Task<ContentDialogResult> ShowDialogAsync(ContentDialog dialog)
+    private ContentDialog? dismissOnExternalFocusDialog;
+    private bool DismissSettingsForExternalFocus()
+    {
+        if(exiting||takingScreenshot||activeDialog is null||!ReferenceEquals(activeDialog,dismissOnExternalFocusDialog))return false;
+        // Hide dismisses the settings with Cancel semantics. Its finally restores
+        // compact bounds without bringing focus back from the user's document.
+        Hide();return true;
+    }
+    private async Task<ContentDialogResult> ShowDialogAsync(ContentDialog dialog,bool dismissOnExternalFocus=false)
     {
         EndWindowPointerGesture();
         activeDialog=dialog;dialogOpen=true;CancelSectionHover();CancelPanelFade();sectionPopup.IsOpen=false;preview.IsOpen=false;
+        if(dismissOnExternalFocus)dismissOnExternalFocusDialog=dialog;
         var original=new RectInt32(AppWindow.Position.X,AppWindow.Position.Y,AppWindow.Size.Width,AppWindow.Size.Height);
         double scale=Math.Max(1,Native.GetDpiForWindow(hwnd)/96d);
         bool enlarged=original.Width<480*scale||original.Height<560*scale;
@@ -29,6 +38,7 @@ public sealed partial class MainWindow
         {
             if(enlarged&&!exiting)AppWindow.MoveAndResize(original);
             if(ReferenceEquals(activeDialog,dialog)){activeDialog=null;dialogOpen=false;}
+            if(ReferenceEquals(dismissOnExternalFocusDialog,dialog))dismissOnExternalFocusDialog=null;
             if(!exiting&&AppWindow.IsVisible){FocusPanel();WatchPanelFocus();}
         }
     }

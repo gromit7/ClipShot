@@ -25,7 +25,8 @@ public sealed partial class MainWindow
     }
     private void DismissSectionForExternalFocus(bool external)
     {
-        if(!external||!CanDismissPanel)return;
+        if(!external)return;
+        if(DismissSettingsForExternalFocus()||!CanDismissPanel)return;
         BeginPanelFade();
     }
     private bool OwnForeground()
