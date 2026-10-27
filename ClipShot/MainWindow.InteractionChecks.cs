@@ -155,10 +155,14 @@ public sealed partial class MainWindow
             for(int wait=0;wait<40&&dialogOpen;wait++)await Task.Delay(25);
             Check(!AppWindow.IsVisible&&!dialogOpen&&activeDialog is null&&dismissOnExternalFocusDialog is null&&AlwaysOnTop,"switching from settings to another application closes the modal and hides even a pinned panel without clearing its pin preference");
             Check(store.Get("days","30")==retainedDays,"leaving settings without Save discards edited retention instead of silently saving it");
-            store.Set("alwaysontop",retainedPin);ApplyAlwaysOnTop();ShowNearCursor();SettingsClick(this,new());await Task.Delay(200);
-            Native.PostMessage(hwnd,0x0112,0xF020,0);await Task.Delay(250);
-            Check(!AppWindow.IsVisible&&!dialogOpen&&activeDialog is null,"minimize dismisses settings and clears modal state");
-            Check(AppWindow.Size.Width<400&&AppWindow.Size.Height<300,"closing settings restores compact bounds");
+            store.Set("alwaysontop",retainedPin);ApplyAlwaysOnTop();ShowNearCursor();var compactBeforeMinimize=AppWindow.Size;SettingsClick(this,new());await Task.Delay(200);
+            Native.PostMessage(hwnd,0x0112,0xF020,0);
+            // Hide completes ContentDialog's asynchronous exit animation. Wait
+            // for its observable completion, not a machine-dependent 250 ms.
+            var minimizeWait=System.Diagnostics.Stopwatch.StartNew();
+            while((AppWindow.IsVisible||dialogOpen||activeDialog is not null)&&minimizeWait.ElapsedMilliseconds<2000)await Task.Delay(25);
+            Check(!AppWindow.IsVisible&&!dialogOpen&&activeDialog is null,$"minimize dismisses settings and clears modal state (wait={minimizeWait.ElapsedMilliseconds}ms, visible={AppWindow.IsVisible}, modal={dialogOpen}, capture={takingScreenshot})");
+            Check(AppWindow.Size.Equals(compactBeforeMinimize),$"closing settings restores compact bounds (expected={compactBeforeMinimize.Width}x{compactBeforeMinimize.Height}, actual={AppWindow.Size.Width}x{AppWindow.Size.Height})");
             ShowNearCursor();SettingsClick(this,new());await Task.Delay(200);await CheckUpdatesFromTray();
             Check(!dialogOpen&&activeDialog is null,"manual check closes settings without saving and isolated UI never accesses network");
             ShowNearCursor();TakeScreenshot();await Task.Delay(400);
