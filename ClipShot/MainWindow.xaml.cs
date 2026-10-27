@@ -266,6 +266,7 @@ public sealed partial class MainWindow : Window
         if(exiting)return;
         try
         {
+            await ShowCopyFeedback(clip.Id);if(exiting)return;
             if(isolated){store.Add(clip.Kind,clip.Text,clip.Html,clip.Rtf,clip.Image);CollapseSection();Render();return;}
             var data=new DataPackage();data.RequestedOperation=DataPackageOperation.Copy;
             if(clip.Image is not null)
@@ -294,7 +295,7 @@ public sealed partial class MainWindow : Window
         {
             CancelSectionHover();hoverTimer.Stop();preview.IsOpen=false;hovered=null;
             long? previousId=selected>=0&&selected<visible.Count?visible[selected].Clip.Id:null;
-            Groups.Children.Clear();TemplateGroups.Children.Clear();sectionHeadings.Clear();sectionAutoCloseRows.Clear();ResetTemplateRenderState();visible.Clear();
+            Groups.Children.Clear();TemplateGroups.Children.Clear();sectionHeadings.Clear();sectionAutoCloseRows.Clear();ResetTemplateRenderState();clipPressOverlays.Clear();visible.Clear();
             string query=Search.Text.Trim();
             var groups=HistoryView.Groups(store.All(),query,store.Get("templateorder",""),DateTime.Today);
             // Поиск сохраняет приоритет шаблонов; в панели их постоянное место — внизу.
@@ -358,6 +359,7 @@ public sealed partial class MainWindow : Window
             var indicator=new Border{Width=3,Height=28,CornerRadius=new CornerRadius(2),Background=ClipBrush("ClipIndicatorBrush"),HorizontalAlignment=HorizontalAlignment.Left,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(3,0,0,0),Visibility=Visibility.Collapsed};
             var contents=new Grid();contents.Children.Add(grid);contents.Children.Add(indicator);
             var row=new Border{Child=contents,Tag=indicator,BorderBrush=ClipBrush("ClipSeparatorBrush"),BorderThickness=new Thickness(0,0,0,1),Background=new SolidColorBrush(Microsoft.UI.Colors.Transparent),BackgroundTransition=new BrushTransition{Duration=TimeSpan.FromMilliseconds(140)}};
+            AttachClipFeedback(row,contents);
             int index=visible.Count;visible.Add((clip,row));ClipRows.Children.Add(row);if(!buildingSection)RegisterSectionAutoCloseRow(title,row);
             AttachTemplateClipDrag(clip,row,templateSearch);
             row.Tapped+=async(_,e)=>{if(!IsButtonSource(e.OriginalSource)&&(!clip.Template||!SuppressTemplateTap()))await Copy(clip);};
