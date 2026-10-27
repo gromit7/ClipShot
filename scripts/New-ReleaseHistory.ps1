@@ -103,12 +103,13 @@ $releases=@(foreach($note in $notes){
     if($changes.Count -lt 1 -or $changes.Count -gt 3 -or @($changes|Where-Object {$_.Length -lt 1 -or $_.Length -gt 160}).Count){throw ('Некорректное краткое описание версии '+$note.Name+'.')}
     [ordered]@{version=$note.Name;changes=$changes}
 })
-$json=([ordered]@{schema=1;releases=$releases}|ConvertTo-Json -Depth 6)+[Environment]::NewLine
+# Keep generated JSON identical to the repository's eol=lf policy on Windows.
+$json=(([ordered]@{schema=1;releases=$releases}|ConvertTo-Json -Depth 6) -replace "`r`n","`n")+"`n"
 $encoding=New-Object Text.UTF8Encoding($false)
 if($encoding.GetByteCount($json) -gt 32768){throw 'История превышает 32 КиБ.'}
 $target=[IO.Path]::GetFullPath($OutputPath)
 $parent=[IO.Path]::GetDirectoryName($target)
 New-Item -ItemType Directory -Path $parent -Force|Out-Null
 # До полной проверки входных данных старый готовый JSON не затрагивается.
-[IO.File]::WriteAllText($target,$json,$encoding)
+if(-not [IO.File]::Exists($target) -or [IO.File]::ReadAllText($target) -cne $json){[IO.File]::WriteAllText($target,$json,$encoding)}
 Write-Output ('История выпусков: '+$releases.Count+' версий, до '+$current+'.')
