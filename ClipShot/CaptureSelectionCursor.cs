@@ -1,6 +1,7 @@
 using Microsoft.UI.Input;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace ClipShot;
 
@@ -53,6 +54,25 @@ internal sealed class CaptureSelectionCursor : IDisposable
         return GetCursorInfo(ref info) && GetClientRect(window, out var client) && Native.ClientToScreen(window, ref origin) &&
             info.X >= origin.X + client.Left && info.X < (long)origin.X + client.Right &&
             info.Y >= origin.Y + client.Top && info.Y < (long)origin.Y + client.Bottom;
+    }
+    internal static string OwnershipDiagnostics(nint captureWindow)
+    {
+        var info = new CursorInfo { Size = Marshal.SizeOf<CursorInfo>() };
+        if (!GetCursorInfo(ref info)) return "PointerWindow=unavailable";
+        nint pointed = WindowFromPoint(new Native.Point { X = info.X, Y = info.Y });
+        uint pointerThread = Native.GetWindowThreadProcessId(pointed, out uint pointerProcess);
+        uint captureThread = Native.GetWindowThreadProcessId(captureWindow, out uint captureProcess);
+        var name = new StringBuilder(256); GetClassName(pointed, name, name.Capacity);
+        return $"PointerWindow=0x{pointed:X}; PointerRoot=0x{Native.GetAncestor(pointed,2):X}; PointerClass={name}; " +
+            $"PointerProcess={pointerProcess}; PointerThread={pointerThread}; CaptureWindow=0x{captureWindow:X}; " +
+            $"CaptureProcess={captureProcess}; CaptureThread={captureThread}; Foreground=0x{Native.GetForegroundWindow():X}";
+    }
+    internal static bool PointerOwnedBy(nint captureWindow)
+    {
+        var info = new CursorInfo { Size = Marshal.SizeOf<CursorInfo>() };
+        if (!GetCursorInfo(ref info)) return false;
+        nint pointed = WindowFromPoint(new Native.Point { X = info.X, Y = info.Y });
+        return pointed == captureWindow || Native.GetAncestor(pointed, 2) == captureWindow;
     }
     internal void Restore(bool ownedBeforeDetach = false)
     {
@@ -134,6 +154,8 @@ internal sealed class CaptureSelectionCursor : IDisposable
     [DllImport("user32.dll")] private static extern nint GetCursor();
     [DllImport("user32.dll", SetLastError = true)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetCursorInfo(ref CursorInfo info);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetClientRect(nint window, out ClientRect rect);
+    [DllImport("user32.dll")] private static extern nint WindowFromPoint(Native.Point point);
+    [DllImport("user32.dll", EntryPoint = "GetClassNameW", CharSet = CharSet.Unicode)] private static extern int GetClassName(nint window, StringBuilder name, int count);
     [DllImport("user32.dll", EntryPoint = "LoadCursorW")] private static extern nint LoadCursor(nint instance, nint name);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool GetIconInfo(nint cursor, out IconInfo info);
     [DllImport("gdi32.dll", EntryPoint = "GetObjectW")] private static extern int GetObject(nint bitmap, int size, out BitmapInfo info);

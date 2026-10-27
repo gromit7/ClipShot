@@ -6,6 +6,8 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Shapes;
+using Microsoft.UI.Xaml.Hosting;
+using Microsoft.UI.Content;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Windows.Foundation;
 using Windows.Graphics;
@@ -23,6 +25,9 @@ internal sealed class RegionCaptureWindow : Window
     }
     private readonly CaptureSurface surface=new();
     private readonly CaptureSelectionCursor cursor;
+    private InputPointerSource? islandPointerSource;
+    private ContentIsland? captureIsland;
+    private string islandCursorBinding="NotLoaded";
     private readonly nint hwnd,previousProcedure;
     private readonly Native.WndProc cursorProcedure;
     private readonly ContentControl focus=new(){IsTabStop=true,HorizontalContentAlignment=HorizontalAlignment.Stretch,VerticalContentAlignment=VerticalAlignment.Stretch};
@@ -55,7 +60,34 @@ internal sealed class RegionCaptureWindow : Window
         surface.Children.Add(new Border{Background=new SolidColorBrush(Windows.UI.Color.FromArgb(230,32,32,32)),CornerRadius=new CornerRadius(8),Padding=new Thickness(18,10,18,10),Margin=new Thickness(20),HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Top,IsHitTestVisible=false,Child=new TextBlock{Text=words.Translate("Выделите область мышью · Esc — отмена"),Foreground=new SolidColorBrush(Microsoft.UI.Colors.White)}});
         focus.Content=surface;Content=focus;
         surface.PointerPressed+=Pressed;surface.PointerMoved+=Moved;surface.PointerReleased+=Released;
-        surface.Loaded+=(_,_)=>{if(!finished)cursor.Apply();};
+        surface.Loaded+=(_,_)=>
+        {
+            if(finished)return;
+            // Configure XAML only after it has a live input site. Native SetCursor
+            // changes this UI thread's cursor, not the island's input-thread cursor.
+            surface.SetSelectionCursor(null);surface.SetSelectionCursor(cursor.XamlCursor);
+            try
+            {
+                captureIsland=ContentIsland.GetByVisual(ElementCompositionPreview.GetElementVisual(surface));
+                if(captureIsland is not null)
+                {
+                    islandPointerSource=InputPointerSource.GetForIsland(captureIsland);
+                    if(islandPointerSource is not null)
+                    {
+                        // With a stationary mouse XAML has no pointer-enter element
+                        // yet and its default island cursor is Arrow. Set the actual
+                        // input owner's initial cursor once; ProtectedCursor handles
+                        // subsequent hit-testing/capture without a cursor timer.
+                        islandPointerSource.Cursor=cursor.XamlCursor;
+                        islandCursorBinding="Bound";
+                    }
+                    else islandCursorBinding="PointerSourceUnavailable";
+                }
+                else islandCursorBinding="IslandUnavailable";
+            }
+            catch(System.Runtime.InteropServices.COMException error){islandCursorBinding=$"Error0x{error.HResult:X8}";}
+            cursor.Apply();
+        };
         CompositionTarget.Rendering+=RenderPending;
         surface.PointerCaptureLost+=(_,_)=>{if(dragging){dragging=false;Reset();}};
         focus.AddHandler(UIElement.KeyDownEvent,new KeyEventHandler((_,e)=>{if(e.Key==VirtualKey.Escape){e.Handled=true;Cancel();}}),true);
@@ -63,7 +95,11 @@ internal sealed class RegionCaptureWindow : Window
         {
             CompositionTarget.Rendering-=RenderPending;
             bool ownedCursor=cursor.IsCurrent;
-            surface.SetSelectionCursor(null);Native.SetWindowLongPtr(hwnd,-4,previousProcedure);
+            surface.SetSelectionCursor(null);
+            try{if(captureIsland is {IsClosed:false}&&islandPointerSource is not null)islandPointerSource.Cursor=null;}
+            catch(System.Runtime.InteropServices.COMException){} // The window may already have closed its input site.
+            islandPointerSource=null;captureIsland=null;
+            Native.SetWindowLongPtr(hwnd,-4,previousProcedure);
             cursor.Restore(ownedCursor);cursor.Dispose();finished=true;completion.TrySetResult(null);
         };
         Activated+=(_,e)=>{if(e.WindowActivationState==WindowActivationState.Deactivated&&!test)Cancel();else if(e.WindowActivationState!=WindowActivationState.Deactivated&&!finished)cursor.Apply();};
@@ -116,7 +152,8 @@ internal sealed class RegionCaptureWindow : Window
     internal bool HasSelectionCursor=>surface.HasSelectionCursor;
     internal bool SelectionCursorIsCurrent=>cursor.IsCurrent;
     internal bool TestPointerInsideClient=>CaptureSelectionCursor.PointerInsideClient(hwnd);
-    internal string TestCursorDiagnostics=>$"HasSelectionCursor={HasSelectionCursor}; PointerInsideClient={TestPointerInsideClient}; {cursor.Diagnostics}";
+    internal bool TestOwnsPointer=>CaptureSelectionCursor.PointerOwnedBy(hwnd);
+    internal string TestCursorDiagnostics=>$"HasSelectionCursor={HasSelectionCursor}; PointerInsideClient={TestPointerInsideClient}; OwnsPointer={TestOwnsPointer}; IslandCursorBinding={islandCursorBinding}; {cursor.Diagnostics}; {CaptureSelectionCursor.OwnershipDiagnostics(hwnd)}";
     private nint CursorMessage(nint window,uint message,nint w,nint l)
     {
         if(message==0x20&&!finished){cursor.Apply();return 1;}

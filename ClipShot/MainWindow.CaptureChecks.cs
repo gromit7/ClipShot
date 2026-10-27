@@ -28,6 +28,7 @@ public sealed partial class MainWindow
             void CursorCheck(RegionCaptureWindow capture,string message)
             {
                 if(!capture.TestPointerInsideClient)throw new InvalidOperationException("Capture test pointer is outside its actual native client area; "+capture.TestCursorDiagnostics);
+                if(!capture.TestOwnsPointer)throw new InvalidOperationException("Capture test pointer is covered by another native window; "+capture.TestCursorDiagnostics);
                 if(!capture.HasSelectionCursor||!capture.SelectionCursorIsCurrent)throw new InvalidOperationException(message+"; "+capture.TestCursorDiagnostics);
             }
             nint previousCursor=CaptureSelectionCursor.CurrentHandle;
