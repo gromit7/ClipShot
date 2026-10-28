@@ -52,11 +52,11 @@ public sealed partial class MainWindow
     {
         bool open=expandedTemplateFolders.GetValueOrDefault(folder.Id);
         var label=new Grid{ColumnSpacing=8};label.ColumnDefinitions.Add(new(){Width=new GridLength(12)});label.ColumnDefinitions.Add(new(){Width=new GridLength(18)});label.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});label.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
-        label.Children.Add(new FontIcon{Glyph=open?"\uE70D":"\uE76C",FontSize=10});var icon=new FontIcon{Glyph="\uE8B7",FontSize=16};Grid.SetColumn(icon,1);label.Children.Add(icon);
+        label.Children.Add(new FontIcon{Glyph=open?"\uE70D":"\uE76C",FontSize=10});var icon=new FontIcon{Glyph=open?"\uE838":"\uE8B7",FontSize=16};Grid.SetColumn(icon,1);label.Children.Add(icon);
         var name=new TextBlock{Text=folder.Name,FontSize=13,FontWeight=Microsoft.UI.Text.FontWeights.SemiBold,TextTrimming=TextTrimming.CharacterEllipsis,VerticalAlignment=VerticalAlignment.Center};Grid.SetColumn(name,2);label.Children.Add(name);
         var count=new TextBlock{Text=folder.ClipIds.Count.ToString(),FontSize=11,Foreground=ClipBrush("ClipSecondaryBrush"),VerticalAlignment=VerticalAlignment.Center};Grid.SetColumn(count,3);label.Children.Add(count);
         var button=new Button{Content=label,Tag=new TemplateFolderButton(folder.Id),HorizontalAlignment=HorizontalAlignment.Stretch,HorizontalContentAlignment=HorizontalAlignment.Stretch,
-            Padding=new Thickness(20,9,12,9),CornerRadius=new CornerRadius(0),BorderThickness=new Thickness(0),Background=ClipBrush("ClipHeaderBrush")};
+            Padding=new Thickness(26,9,12,9),CornerRadius=new CornerRadius(0),BorderThickness=new Thickness(0),Background=FolderHeaderBrush()};
         button.Click+=(_,_)=>{if(!SuppressTemplateTap())ToggleTemplateFolder(folder.Id);};
         var border=new Border{Child=button,BorderBrush=ClipBrush("ClipSeparatorBrush"),BorderThickness=new Thickness(0,0,0,1)};
         var menu=new MenuFlyout();TrackMenu(menu);
@@ -66,6 +66,15 @@ public sealed partial class MainWindow
         Item("Переместить ниже",()=>MoveTemplateEntryByOffset(TemplateFolderKey(folder.Id),1));
         Item("Разобрать папку",()=>UngroupTemplateFolder(folder.Id));button.ContextFlyout=menu;
         AttachTemplateDrag(border,TemplateFolderKey(folder.Id));ClipRows.Children.Add(border);templateFolderButtons[folder.Id]=button;templateFolderHeaderRows[folder.Id]=border;
+    }
+    private SolidColorBrush FolderHeaderBrush()
+    {
+        // Папки мягче заголовков разделов; цвет берётся из текущей темы.
+        // Отступ и направляющая сохраняют иерархию и без цветоразличения.
+        var header=ThemeColor(activeTheme.Window);
+        var selection=((SolidColorBrush)ClipBrush("ClipSelectionBrush")).Color;
+        byte Mix(byte a,byte b)=>(byte)(a+(b-a)*.55);
+        return new(Windows.UI.Color.FromArgb(255,Mix(header.R,selection.R),Mix(header.G,selection.G),Mix(header.B,selection.B)));
     }
     private static bool IsTemplateFolderKeySource(DependencyObject? source)
     {

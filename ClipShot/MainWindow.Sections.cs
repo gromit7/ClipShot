@@ -16,6 +16,18 @@ public sealed partial class MainWindow
     private int sectionHeadingIndex;
     private readonly DispatcherTimer sectionFocusTimer=new(){Interval=TimeSpan.FromMilliseconds(250)};
     private bool sectionFocusTimerReady;
+    // Состояние навигации относится к одному показу панели, а не к данным.
+    // Временное скрытие HWND для захвата сюда не направляется.
+    private void ResetNavigation()
+    {
+        foreach(var title in expanded.Keys.ToArray())expanded[title]=false;
+        expandedTemplateFolders.Clear();
+        activeSection=null;sectionInitialized=true;animatedSection=null;
+        sectionPopup.IsOpen=false;preview.IsOpen=false;hovered=null;
+        hoverTimer.Stop();leaveTimer.Stop();
+        preserveExpandedDragPosition=false;preserveCollapsedPosition=false;
+        compactGroupCount=-1;
+    }
     private void CollapseSection()
     {
         if(!SideSections)return;

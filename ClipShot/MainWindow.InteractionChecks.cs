@@ -40,6 +40,7 @@ public sealed partial class MainWindow
             await RunWindowDragChecks(results);
             await RunInlinePanelChecks(results);
             await RunTemplateFolderChecks(results);
+            await RunNavigationResetChecks(results);
             var presenter=(Microsoft.UI.Windowing.OverlappedPresenter)AppWindow.Presenter;
             var pin=((Microsoft.UI.Xaml.Controls.MenuFlyout)Root.ContextFlyout).Items.OfType<Microsoft.UI.Xaml.Controls.ToggleMenuFlyoutItem>().Single(i=>Equals(i.Tag,"alwaysontop"));
             Check(!AlwaysOnTop&&!presenter.IsAlwaysOnTop&&!pin.IsChecked,"always-on-top is off by default in both saved preference and presenter");
@@ -55,7 +56,7 @@ public sealed partial class MainWindow
             Check(presenter.IsAlwaysOnTop&&((Microsoft.UI.Xaml.Controls.MenuFlyout)Root.ContextFlyout).Items.OfType<Microsoft.UI.Xaml.Controls.ToggleMenuFlyoutItem>().Single(i=>Equals(i.Tag,"alwaysontop")).IsChecked,"startup application and rebuilt menu restore saved topmost preference");
             DismissSectionForExternalFocus(true);await Task.Delay(240);
             Check(AppWindow.IsVisible&&sectionPopup.IsOpen&&!panelFading,"always-on-top preserves panel and section when another application takes focus");
-            Hide();Check(!AppWindow.IsVisible&&AlwaysOnTop,"explicit hide still works while pinned without clearing the preference");ShowNearCursor();
+            Hide();Check(!AppWindow.IsVisible&&AlwaysOnTop,"explicit hide still works while pinned without clearing the preference");ShowNearCursor();ToggleSection("Сегодня");
             ToggleAlwaysOnTop();
             Check(!AlwaysOnTop&&!presenter.IsAlwaysOnTop&&store.Get("alwaysontop","1")=="0","tray toggle disables topmost and restores ordinary dismissal behavior");
             string autofit=store.Get("panelautofit","1");BeginWindowResize();EndWindowResize();
@@ -85,7 +86,7 @@ public sealed partial class MainWindow
             ToggleSection("Сегодня");await Task.Delay(150);
             hovered=visible.First(v=>v.Clip.Kind=="text").Clip;hoverAnchor=visible.First(v=>v.Clip.Id==hovered.Id).Row;ShowPreview();await Task.Delay(150);
             Check(preview.IsOpen,"preview works for a clip inside the side panel");hovered=null;preview.IsOpen=false;
-            store.Set("sectionlayout","inline");Render();Check(visible.Count==6&&!sectionPopup.IsOpen,"inline preference restores the full list");
+            store.Set("sectionlayout","inline");expanded["Сегодня"]=true;expanded["Шаблоны"]=true;Render();Check(visible.Count==6&&!sectionPopup.IsOpen,"explicitly expanded inline sections restore the full list");
             Check(updateClient is null&&!updateTimer.IsEnabled,"isolated UI never checks or installs internet updates");
             Check(AutomaticUpdates&&!CanAutoInstall(),"automatic install is default but isolated UI cannot install");
             Native.PostMessage(hwnd,App.UpdateQuitMessage,(nint)unchecked((uint)Environment.TickCount+5000),0);await Task.Delay(100);
@@ -134,6 +135,7 @@ public sealed partial class MainWindow
             Check(store.All().Count==count,"copy selection does not duplicate history");
             Search.Text="";await Task.Delay(100);
             ShowNearCursor();
+            expanded["Шаблоны"]=true;Render();
             hovered=visible[0].Clip with {Kind="image",Image=[1,2,3]};hoverAnchor=visible[0].Row;Status.Text="";
             ShowPreview();for(int attempt=0;attempt<20&&Status.Text=="";attempt++)await Task.Delay(100);
             Check(!preview.IsOpen&&Status.Text.Contains("предпросмотр"),"invalid image preview reports error without crashing");
@@ -175,7 +177,7 @@ public sealed partial class MainWindow
             TakeScreenshot();await Task.Delay(400);DismissSectionForExternalFocus(true);await Task.Delay(240);
             Check(captureWindow is not null&&AppWindow.IsVisible&&sectionPopup.IsOpen&&activeSection=="Сегодня"&&!panelFading,"own area capture preserves both the main panel and expanded side clips despite focus and pointer leaving them");
             captureWindow?.Cancel();await Task.Delay(150);store.Set("sectionlayout",captureLayout);Render();
-            store.Add("text","Настройки");Render();long untranslated=store.All().First(c=>c.Text=="Настройки").Id;
+            store.Add("text","Настройки");expanded["Сегодня"]=true;Render();long untranslated=store.All().First(c=>c.Text=="Настройки").Id;
             store.Set("language","en");ApplyLanguage();Render();
             Check(Search.PlaceholderText.Length==0&&Microsoft.UI.Xaml.Controls.ToolTipService.GetToolTip(Search)?.ToString()=="Search history"&&SelectHint.Text=="Select","English tooltip is applied while search stays unlabelled");
             bool ContainsText(DependencyObject node,string value){if(node is Microsoft.UI.Xaml.Controls.TextBlock t&&t.Text==value)return true;for(int i=0;i<Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(node);i++)if(ContainsText(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(node,i),value))return true;return false;}

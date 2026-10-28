@@ -74,6 +74,7 @@ public sealed partial class MainWindow : Window
             {try{SetStartup(true);}catch{Status.Text=T("Не удалось обновить путь автозапуска.");}}
         }
         if(!isolated||shellTest){RegisterKey();RegisterScreenshotKey();RegisterScreenshotAlias();CreateTray();}
+        if(!isolated)ResetNavigation();
         StartMicrophone();StartUpdates();ApplyTheme(); Root.ActualThemeChanged+=(_,_)=>{StyleTitleBar();Render();}; Prune(); Render();
         Root.AddHandler(UIElement.KeyDownEvent,new KeyEventHandler(RootKeyDown),true);
         Root.PointerPressed+=DragEmptySpace;
@@ -159,6 +160,7 @@ public sealed partial class MainWindow : Window
         if(editor is not null){editor.AppWindow.Show();editor.Activate();return;}
         if(takingScreenshot||exiting||startupUpdatePending)return;
         if(clipdiaryImportRunning){AppWindow.Show();Activate();return;}
+        if(!AppWindow.IsVisible&&!isolated)ResetNavigation();
         CancelPanelFade();Prune();Render();Native.GetCursorPos(out var p);
         if(InlineLayout)
         {
@@ -175,9 +177,9 @@ public sealed partial class MainWindow : Window
             int y=Math.Clamp(p.Y+12,area.Y,Math.Max(area.Y,area.Y+area.Height-AppWindow.Size.Height));
             AppWindow.Move(new PointInt32(x,y));
         }
-        AppWindow.Show();Activate();Native.SetForegroundWindow(hwnd);FocusPanel();PositionSection();WatchPanelFocus();ShowUpdateOffer();DockCollapsedPanel();
+        AppWindow.Show();Activate();Native.SetForegroundWindow(hwnd);FocusPanel();PositionSection();WatchPanelFocus();ShowUpdateOffer();QueueInlinePanelFit();DockCollapsedPanel();
     }
-    private void Hide(){if(templatePointerRow is not null)EndTemplateDrag();EndWindowPointerGesture();CancelPanelFade();activeDialog?.Hide();sectionFocusTimer.Stop();sectionPopup.IsOpen=false;preview.IsOpen=false;hoverTimer.Stop();leaveTimer.Stop();AppWindow.Hide();CollapseSearch(false);}
+    private void Hide(){if(templatePointerRow is not null)EndTemplateDrag();EndWindowPointerGesture();CancelPanelFade();activeDialog?.Hide();sectionFocusTimer.Stop();AppWindow.Hide();CollapseSearch(false);ResetNavigation();Render();}
     private void ToggleVisibility()
     {
         if(exiting||takingScreenshot)return;
@@ -342,7 +344,8 @@ public sealed partial class MainWindow : Window
         foreach(var clip in TemplateRenderClips(title,clips,templateSearch))
         {
             if(!PrepareTemplateFolderRow(title,clip,templateSearch))continue;
-            var grid=new Grid{ColumnSpacing=12,Margin=new Thickness(20,10,20,10),MinHeight=30};grid.ColumnDefinitions.Add(new(){Width=new GridLength(clip.Image is null?26:76)});grid.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});grid.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
+            bool folderChild=title=="Шаблоны"&&!templateSearch&&renderedTemplateParents.ContainsKey(clip.Id);
+            var grid=new Grid{ColumnSpacing=12,Margin=new Thickness(folderChild?46:20,10,20,10),MinHeight=30};grid.ColumnDefinitions.Add(new(){Width=new GridLength(clip.Image is null?26:76)});grid.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});grid.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
             var text=new TextBlock{Text=clip.Kind=="image"&&clip.Name.Length==0?T("Изображение"):clip.Label,Foreground=primaryBrush,FontSize=14,MaxLines=1,TextTrimming=TextTrimming.CharacterEllipsis,VerticalAlignment=VerticalAlignment.Center};
             if(clip.Image is not null)
             {
@@ -362,6 +365,7 @@ public sealed partial class MainWindow : Window
             else{Grid.SetColumn(time,2);grid.Children.Add(time);}
             var indicator=new Border{Width=3,Height=28,CornerRadius=new CornerRadius(2),Background=ClipBrush("ClipIndicatorBrush"),HorizontalAlignment=HorizontalAlignment.Left,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(3,0,0,0),Visibility=Visibility.Collapsed};
             var contents=new Grid();contents.Children.Add(grid);contents.Children.Add(indicator);
+            if(folderChild)contents.Children.Add(new Border{Width=1,Margin=new Thickness(31,0,0,0),HorizontalAlignment=HorizontalAlignment.Left,Background=ClipBrush("ClipSeparatorBrush"),IsHitTestVisible=false});
             var row=new Border{Child=contents,Tag=indicator,BorderBrush=ClipBrush("ClipSeparatorBrush"),BorderThickness=new Thickness(0,0,0,1),Background=new SolidColorBrush(Microsoft.UI.Colors.Transparent),BackgroundTransition=new BrushTransition{Duration=TimeSpan.FromMilliseconds(140)}};
             AttachClipFeedback(row,contents);
             int index=visible.Count;visible.Add((clip,row));ClipRows.Children.Add(row);

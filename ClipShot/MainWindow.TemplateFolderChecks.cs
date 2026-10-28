@@ -66,6 +66,10 @@ public sealed partial class MainWindow
             EndTemplateDrag();
             store.Set("sectionlayout","inline");Render();await Settle();
             Check(IsTemplateFolderKeySource(templateFolderButtons[folder.Id])&&templateFolderButtons[folder.Id].Content is Grid,"folder header has a keyboard source guard so Enter and Space cannot copy a selected clip");
+            var nestedRow=visible.Single(item=>item.Clip.Id==a).Row;
+            var nestedContents=(Grid)nestedRow.Child;
+            Check(((Grid)nestedContents.Children[0]).Margin.Left==46&&nestedContents.Children.OfType<Border>().Any(border=>border.Width==1&&!border.IsHitTestVisible),"folder children have structural indentation and a noninteractive hierarchy guide");
+            Check(templateFolderButtons[folder.Id].Padding.Left==26&&templateFolderButtons[folder.Id].Background is Microsoft.UI.Xaml.Media.SolidColorBrush,"folder headers use a separate inset and theme-aware background without changing drag targets");
             ToggleTemplateFolder(folder.Id);await Settle();
             Check(visible.All(item=>item.Clip.Id!=a&&item.Clip.Id!=b)&&Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(templateFolderHeaderRows[folder.Id]) is not null,"a collapsed folder hides its child rows while its header remains inside the visible template list");
             ToggleTemplateFolder(folder.Id);await Settle();
