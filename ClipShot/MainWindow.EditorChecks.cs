@@ -18,7 +18,10 @@ public sealed partial class MainWindow
                 captureWindow.Cancel();await Task.Delay(150);
                 if(!ReferenceEquals(editor,testedEditor)||testedEditor.IsClosed)throw new InvalidOperationException("Capture replaced or closed editor");
             });var png=await result;await editing;
-            checks.Add(store.All().Count==initialCount&&store.All().Single(c=>c.Id==image.Id).Image!.SequenceEqual(png!)?"PASS applying edits updates the same clip without creating a duplicate":"FAIL edit created a second clip or lost its result");
+            var saved=store.All();var edited=saved.SingleOrDefault(c=>c.Id!=image.Id&&c.Image is not null&&c.Image.SequenceEqual(png!));
+            checks.Add(saved.Count==initialCount+1&&saved.Single(c=>c.Id==image.Id).Image!.SequenceEqual(image.Image!)&&edited?.ImageSourceId==image.Id?"PASS applying edits preserves the original and saves a separate linked screenshot":"FAIL original was changed or edited copy is missing");
+            var pair=HistoryView.Groups(saved,"","",DateTime.Today).Single(g=>g.Clips.Any(c=>c.Id==image.Id)).Clips;
+            checks.Add(edited is not null&&Math.Abs(pair.FindIndex(c=>c.Id==image.Id)-pair.FindIndex(c=>c.Id==edited.Id))==1?"PASS edited screenshot is adjacent to its original in history":"FAIL edited screenshot is separated from its original");
             checks.Add(sequence==Native.GetClipboardSequenceNumber()?"PASS editor test does not change system clipboard":"FAIL system clipboard changed");
             checks.Add(png is not null?"PASS edited image is available to the calling window":"FAIL missing result");
             File.WriteAllLines(Path.Combine(dataFolder,"editor-checks.txt"),checks);

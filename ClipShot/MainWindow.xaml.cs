@@ -346,7 +346,7 @@ public sealed partial class MainWindow : Window
             if(!PrepareTemplateFolderRow(title,clip,templateSearch))continue;
             bool folderChild=title=="Шаблоны"&&!templateSearch&&renderedTemplateParents.ContainsKey(clip.Id);
             var grid=new Grid{ColumnSpacing=12,Margin=new Thickness(folderChild?46:20,10,20,10),MinHeight=30};grid.ColumnDefinitions.Add(new(){Width=new GridLength(clip.Image is null?26:76)});grid.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});grid.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
-            var text=new TextBlock{Text=clip.Kind=="image"&&clip.Name.Length==0?T("Изображение"):clip.Label,Foreground=primaryBrush,FontSize=14,MaxLines=1,TextTrimming=TextTrimming.CharacterEllipsis,VerticalAlignment=VerticalAlignment.Center};
+            var text=new TextBlock{Text=clip.Kind=="image"&&clip.Name.Length==0?T(clip.ImageSourceId is not null?"Изменённый снимок":"Изображение"):clip.Label,Foreground=primaryBrush,FontSize=14,MaxLines=1,TextTrimming=TextTrimming.CharacterEllipsis,VerticalAlignment=VerticalAlignment.Center};
             if(clip.Image is not null)
             {
                 var img=new Image{Width=74,Height=44,Stretch=Stretch.UniformToFill};grid.Children.Add(new Border{Child=img,CornerRadius=new CornerRadius(4),HorizontalAlignment=HorizontalAlignment.Left});

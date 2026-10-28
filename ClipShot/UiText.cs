@@ -9,6 +9,8 @@ public sealed class UiText(string? language)
     private static readonly Dictionary<string,string> EnglishText=new(StringComparer.Ordinal)
     {
         ["Перетащить окно"]="Drag window",
+        ["Изменённый снимок"]="Edited screenshot",
+        ["Правки снимка сохраняются отдельной записью рядом с исходником; исходник не меняется. В буфер копируется изменённый вариант."]="Screenshot edits are saved as a separate entry beside the original, which remains unchanged. The edited version is copied to the clipboard.",
         ["При скрытии и повторном открытии все разделы и папки свёрнуты. Вложенные клипы отличаются от папок отступом и тонкой линией."]="Hiding and reopening collapses all sections and folders. Nested clips use indentation and a thin guide to distinguish them from folders.",
         ["Переход из настроек в другую программу закрывает их и скрывает ClipShot. Изменения применяются кнопкой «Сохранить»."]="Switching from settings to another app closes them and hides ClipShot. Use Save to apply changes.",
         ["Перетаскивание шаблонов: край строки меняет порядок, центр другой записи создаёт папку. Перенос на папку добавляет клип в неё; правая кнопка позволяет переименовать или разобрать папку."]="Drag templates: a row edge reorders, the center of another entry creates a folder. Drop on a folder to add a clip; right-click to rename or ungroup it.",

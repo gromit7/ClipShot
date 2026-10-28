@@ -27,9 +27,8 @@ public sealed partial class MainWindow
             Hide();byte[]? png=await editor.ShowAsync();editor=null;
             if(exiting)return;
             if(png is null){ShowNearCursor();return;}
-            // Копирование результата — применение к выбранному клипу, а не новый дубликат.
-            try{store.EditImage(clip.Id,png);}
-            catch(Microsoft.Data.Sqlite.SqliteException){ShowNearCursor();Status.Text=T("Такой снимок уже есть в истории. Исходный клип не изменён.");return;}
+            // Правки сохраняются отдельным клипом; связь держит его рядом с исходником.
+            store.AddEditedImage(clip.Id,png);
             if(!isolated)
             {
                 using var stream=new InMemoryRandomAccessStream();using(var writer=new DataWriter(stream.GetOutputStreamAt(0))){writer.WriteBytes(png);await writer.StoreAsync();}stream.Seek(0);

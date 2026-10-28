@@ -6,6 +6,7 @@ using System.Globalization;
 namespace ClipShot;
 public sealed record Clip(long Id, string Kind, string Text, string Html, string Rtf, byte[]? Image, bool Template, string Name, DateTime Seen)
 {
+    public long? ImageSourceId { get; init; }
     public string Label => Name.Length > 0 ? Name : Kind == "image" ? "Изображение" : Text.Replace('\r', ' ').Replace('\n', ' ');
 }
 public sealed record ImportSummary(int Imported,int Existing,int Skipped);
@@ -25,6 +26,10 @@ public sealed partial class Store : IDisposable
         PRAGMA journal_mode=WAL;
         CREATE TABLE IF NOT EXISTS clips(id INTEGER PRIMARY KEY, hash TEXT NOT NULL UNIQUE, kind TEXT NOT NULL, text TEXT NOT NULL DEFAULT '', html TEXT NOT NULL DEFAULT '', rtf TEXT NOT NULL DEFAULT '', image BLOB, template INTEGER NOT NULL DEFAULT 0, name TEXT NOT NULL DEFAULT '', seen TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS image_edits(clip_id INTEGER PRIMARY KEY,source_id INTEGER NOT NULL);
+        CREATE TRIGGER IF NOT EXISTS cleanup_image_edits AFTER DELETE ON clips BEGIN
+            DELETE FROM image_edits WHERE clip_id=OLD.id OR source_id=OLD.id;
+        END;
         """; c.ExecuteNonQuery();
         InitializeTemplateFolders();
         }
@@ -160,9 +165,9 @@ public sealed partial class Store : IDisposable
     }
     public List<Clip> All()
     {
-        using var c = db.CreateCommand(); c.CommandText="SELECT id,kind,text,html,rtf,image,template,name,seen FROM clips ORDER BY seen DESC,id DESC";
+        using var c = db.CreateCommand(); c.CommandText="SELECT c.id,c.kind,c.text,c.html,c.rtf,c.image,c.template,c.name,c.seen,e.source_id FROM clips c LEFT JOIN image_edits e ON e.clip_id=c.id ORDER BY c.seen DESC,c.id DESC";
         using var r=c.ExecuteReader(); var result=new List<Clip>();
-        while(r.Read()) result.Add(new(r.GetInt64(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetString(4),r.IsDBNull(5)?null:(byte[])r[5],r.GetInt64(6)!=0,r.GetString(7),DateTime.Parse(r.GetString(8),null,System.Globalization.DateTimeStyles.RoundtripKind).ToLocalTime()));
+        while(r.Read()) result.Add(new(r.GetInt64(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetString(4),r.IsDBNull(5)?null:(byte[])r[5],r.GetInt64(6)!=0,r.GetString(7),DateTime.Parse(r.GetString(8),null,System.Globalization.DateTimeStyles.RoundtripKind).ToLocalTime()){ImageSourceId=r.IsDBNull(9)?null:r.GetInt64(9)});
         return result;
     }
     public void Template(long id, bool value) => Change("UPDATE clips SET template=$v WHERE id=$id",id,value?1:0);
@@ -173,17 +178,37 @@ public sealed partial class Store : IDisposable
         using var c=db.CreateCommand();c.CommandText="UPDATE clips SET name=$name,text=$text,hash=$hash,html='',rtf='' WHERE id=$id";
         c.Parameters.AddWithValue("$name",name);c.Parameters.AddWithValue("$text",text);c.Parameters.AddWithValue("$hash",hash);c.Parameters.AddWithValue("$id",id);c.ExecuteNonQuery();
     }
-    public void EditImage(long id,byte[] image)
+    public long AddEditedImage(long id,byte[] image)
     {
         ArgumentNullException.ThrowIfNull(image);
         if(image.Length==0)throw new ArgumentException("Image cannot be empty.",nameof(image));
         string hash="image"+Convert.ToHexString(SHA256.HashData(image));
-        // Одно UPDATE атомарно заменяет содержимое существующего снимка, сохраняя его id,
-        // имя и признак шаблона. UNIQUE-конфликт отменяет всё изменение; другой клип не удаляем.
-        using var c=db.CreateCommand();c.CommandText="UPDATE clips SET image=$image,hash=$hash,seen=$seen WHERE id=$id AND kind='image'";
-        c.Parameters.AddWithValue("$image",image);c.Parameters.AddWithValue("$hash",hash);
-        c.Parameters.AddWithValue("$seen",DateTime.UtcNow.ToString("O"));c.Parameters.AddWithValue("$id",id);
-        if(c.ExecuteNonQuery()!=1)throw new InvalidOperationException("The clip does not exist or is not an image.");
+        using var transaction=db.BeginTransaction();
+        long source;string originalHash;
+        using(var read=db.CreateCommand())
+        {
+            read.CommandText="SELECT c.hash,COALESCE(e.source_id,c.id) FROM clips c LEFT JOIN image_edits e ON e.clip_id=c.id WHERE c.id=$id AND c.kind='image'";
+            read.Parameters.AddWithValue("$id",id);using var row=read.ExecuteReader();
+            if(!row.Read())throw new InvalidOperationException("The clip does not exist or is not an image.");
+            originalHash=row.GetString(0);source=row.GetInt64(1);
+        }
+        // Без правок нового дубликата нет; исходник и дата не меняются.
+        if(originalHash==hash){transaction.Commit();return id;}
+        using(var existing=db.CreateCommand())
+        {
+            existing.CommandText="SELECT id FROM clips WHERE hash=$hash";existing.Parameters.AddWithValue("$hash",hash);
+            if(existing.ExecuteScalar() is long found){transaction.Commit();return found;}
+        }
+        Add("image","",image:image);
+        using var find=db.CreateCommand();find.CommandText="SELECT id FROM clips WHERE hash=$hash";find.Parameters.AddWithValue("$hash",hash);
+        long edited=(long)find.ExecuteScalar()!;
+        if(edited!=source)
+        {
+            using var relation=db.CreateCommand();
+            relation.CommandText="INSERT INTO image_edits(clip_id,source_id) VALUES($edited,$source) ON CONFLICT(clip_id) DO NOTHING";
+            relation.Parameters.AddWithValue("$edited",edited);relation.Parameters.AddWithValue("$source",source);relation.ExecuteNonQuery();
+        }
+        transaction.Commit();return edited;
     }
     public void Delete(long id) => Change("DELETE FROM clips WHERE id=$id",id,0);
     private void Change(string sql,long id,object value)
