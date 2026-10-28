@@ -550,7 +550,13 @@ public sealed partial class MainWindow : Window
             byte[] png=new byte[(int)stream.Size];using var reader=new DataReader(stream);await reader.LoadAsync((uint)png.Length);reader.ReadBytes(png);store.Add("image","",image:png);
         }
         var item=store.All().First(c=>c.Text=="test@example.com");store.Template(item.Id,true);
-        if(Environment.GetCommandLineArgs().Contains("--template-demo"))store.Template(store.All().First(c=>c.Text=="Тестовая запись ClipShot").Id,true);
+        if(Environment.GetCommandLineArgs().Any(a=>a is "--template-demo" or "--folder-demo"))store.Template(store.All().First(c=>c.Text=="Тестовая запись ClipShot").Id,true);
+        if(Environment.GetCommandLineArgs().Contains("--folder-demo"))
+        {
+            var templates=store.All().Where(c=>c.Template).ToArray();
+            long folder=store.CreateTemplateFolder("Примеры",templates[0].Id,templates[1].Id);
+            expandedTemplateFolders[folder]=true;expanded["Шаблоны"]=true;
+        }
         Render();
         if(Environment.GetCommandLineArgs().Any(a=>a is "--editor-self-test" or "--editor-demo")){await RunEditorChecks(Environment.GetCommandLineArgs().Contains("--editor-demo"));return;}
         if(shellTest){WriteShellReport();return;}

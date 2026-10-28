@@ -60,4 +60,15 @@ release=original;before=len([url for url in requests if '/releases/download/' in
 check(before==after,'Re-running verified family avoids downloading packages again')
 record=run('9.8.7','check')
 check(len(record['packages'])==3 and record['mirror_present_and_valid'] and record['latest_zip_valid'],'Check-only reports three verified packages without publication')
+release=make_release('9.8.8')
+alias=json.loads(json.dumps(release['assets'][0]));alias['name']='ClipShot-9.8.8.exe'
+alias['browser_download_url']='https://github.com/gromit7/ClipShot/releases/download/v9.8.8/ClipShot-9.8.8.exe'
+payloads[alias['name']]=payloads['ClipShot-Setup-9.8.8.exe'];release['assets'].append(alias)
+record=run('9.8.8')
+check(len(record['packages'])==4 and all(p['verified'] for p in record['packages']),'Universal name is published and verified alongside compatible updater names')
+check((root/'v9.8.8'/'ClipShot-9.8.8.exe').read_bytes()==payloads['ClipShot-Setup-9.8.8.exe'],'Universal public file preserves exact official package bytes')
+release['assets'][-1]['digest']='sha256:'+'0'*64
+rejects(lambda:module.official_packages(release,'9.8.8'),'Universal alias with a different hash is rejected before publication')
+release['assets'][-1]['digest']=release['assets'][0]['digest'];release['assets'].append(dict(release['assets'][-1]))
+rejects(lambda:module.official_packages(release,'9.8.8'),'Duplicate universal public name is rejected')
 print(f'{count} mirror fixture checks passed; no network access')

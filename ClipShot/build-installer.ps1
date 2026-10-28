@@ -30,6 +30,9 @@ foreach($flavor in 'legacy','win10','win11') {
 }
 $setup=Join-Path (Split-Path $PSScriptRoot) ("ClipShot-Setup-"+$version+".exe")
 if(-not (Test-Path -LiteralPath $setup)){throw 'Compiled installer not found.'}
+$universal=Join-Path (Split-Path $PSScriptRoot) ("ClipShot-"+$version+".exe")
+Copy-Item -LiteralPath $setup -Destination $universal -Force
+if((Get-FileHash -LiteralPath $setup).Hash -ne (Get-FileHash -LiteralPath $universal).Hash){throw 'Universal installer copy does not match tested package.'}
 if($NoLatestCopy){return}
 if(-not $LatestInstallerDir -and (Test-Path -LiteralPath 'D:\install')){$LatestInstallerDir='D:\install\Codex Software'}
 if($LatestInstallerDir){& (Join-Path (Split-Path $PSScriptRoot) 'scripts/Publish-Installer.ps1') -Setup $setup -Destination $LatestInstallerDir}

@@ -16,15 +16,19 @@ $source=Join-Path $fixture 'source';$destination=Join-Path $fixture 'destination
 $version='9.8.7'
 foreach($flavor in '', '-Win10','-Win11'){Text (Join-Path $source "ClipShot$flavor-Setup-$version.exe") ('synthetic '+$flavor)}
 Text (Join-Path $destination 'ClipShot-Setup-0.7.3.exe') 'previous legacy'
+Text (Join-Path $destination 'ClipShot-0.7.2.exe') 'previous universal public name'
 Text (Join-Path $destination 'ClipShot-Win10-Setup-0.7.3.exe') 'previous Win10'
 Text (Join-Path $destination 'ClipShot-Win11-Setup-9.8.7.exe') 'same name, previous bytes'
 Text (Join-Path $destination 'other.exe') 'foreign'
 $previous=@(Get-ChildItem -LiteralPath $destination -File|Where-Object Name -ne 'other.exe'|ForEach-Object{@{Name=$_.Name;Hash=(Get-FileHash -LiteralPath $_.FullName).Hash}})
 & (Join-Path $repo 'scripts/Publish-Installer.ps1') -Setup (Join-Path $source "ClipShot-Setup-$version.exe") -Destination $destination | Out-Null
 $names=@(Get-ChildItem -LiteralPath $destination -File|ForEach-Object Name)
-Assert ($names.Count -eq 3 -and $names -contains 'other.exe' -and $names -contains 'ClipShot-Win10-Setup-9.8.7.exe' -and $names -contains 'ClipShot-Win11-Setup-9.8.7.exe') 'D destination keeps exactly two OS files and unrelated software'
+Assert ($names.Count -eq 2 -and $names -contains 'other.exe' -and $names -contains 'ClipShot-9.8.7.exe') 'D destination keeps one universal installer and unrelated software'
 foreach($old in $previous){Assert (@(Get-ChildItem -LiteralPath $source -File|Where-Object {(Get-FileHash -LiteralPath $_.FullName).Hash -eq $old.Hash}).Count -gt 0) ('Previous bytes archived: '+$old.Name)}
-foreach($flavor in 'Win10','Win11'){Assert ((Get-FileHash -LiteralPath (Join-Path $source "ClipShot-$flavor-Setup-$version.exe")).Hash -eq (Get-FileHash -LiteralPath (Join-Path $destination "ClipShot-$flavor-Setup-$version.exe")).Hash) ('Final copy SHA: '+$flavor)}
+Assert ((Get-FileHash -LiteralPath (Join-Path $source "ClipShot-Setup-$version.exe")).Hash -eq (Get-FileHash -LiteralPath (Join-Path $destination "ClipShot-$version.exe")).Hash) 'Universal public name preserves verified package bytes'
+Copy-Item -LiteralPath (Join-Path $source "ClipShot-Setup-$version.exe") -Destination (Join-Path $source "ClipShot-$version.exe")
+& (Join-Path $repo 'scripts/Publish-Installer.ps1') -Setup (Join-Path $source "ClipShot-$version.exe") -Destination $destination | Out-Null
+Assert (@(Get-ChildItem -LiteralPath $destination -Filter 'ClipShot*.exe').Count -eq 1) 'Publishing with the canonical source name is idempotent'
 $blocked=Join-Path $fixture 'blocked';Text (Join-Path $blocked 'ClipShot-Setup-1.2.3.exe') 'keep on failure'
 $old=Get-Item -LiteralPath (Join-Path $blocked 'ClipShot-Setup-1.2.3.exe');$hash=(Get-FileHash -LiteralPath $old.FullName).Hash
 Text (Join-Path $source $old.Name) 'archive conflict'
@@ -72,14 +76,15 @@ $gate=@('Isolated install, running-app upgrade and uninstall','Installer OS comp
 Text (Join-Path $evidenceRoot 'TestResults/release-checks.json') (ConvertTo-Json -InputObject @($gate))
 foreach($name in 'ClipShot.exe','ClipShot.dll','ClipShot.pri','Assets/ClipShot.ico','Assets/ClipShot.Muted.ico','Assets/ClipShot.png','LICENSE','FileInventory.json','FileHashes.json','Updater/ClipShot.Updater.exe'){Text (Join-Path $evidenceRoot ('ClipShot-app/'+$name)) ('synthetic '+$name)}
 foreach($prefix in 'ClipShot','ClipShot-Win10','ClipShot-Win11'){Text (Join-Path $evidenceRoot "$prefix-Setup-9.8.7.exe") ('synthetic '+$prefix)}
+Copy-Item -LiteralPath (Join-Path $evidenceRoot 'ClipShot-Setup-9.8.7.exe') -Destination (Join-Path $evidenceRoot 'ClipShot-9.8.7.exe')
 function git {param([Parameter(ValueFromRemainingArguments=$true)]$Arguments);$global:LASTEXITCODE=0;if($Arguments -contains 'rev-parse'){'1'*40}}
 function FakeDotnet {$global:LASTEXITCODE=0;'10.0.402'}
 $oldDotnet=$env:CLIPSHOT_DOTNET
 try{$env:CLIPSHOT_DOTNET='FakeDotnet';& (Join-Path $evidenceRoot 'scripts/New-ReleaseEvidence.ps1') -Setup (Join-Path $evidenceRoot 'ClipShot-Setup-9.8.7.exe')|Out-Null}finally{$env:CLIPSHOT_DOTNET=$oldDotnet}
 $evidence=Get-Content -LiteralPath (Join-Path $evidenceRoot 'ClipShot-9.8.7-buildinfo.json') -Raw|ConvertFrom-Json
-Assert ($evidence.installer.file -eq 'ClipShot-Setup-9.8.7.exe' -and $evidence.packages.Count -eq 3) 'Evidence preserves legacy installer and lists all three packages'
+Assert ($evidence.installer.file -eq 'ClipShot-Setup-9.8.7.exe' -and $evidence.packages.Count -eq 4 -and $evidence.packages[3].file -eq 'ClipShot-9.8.7.exe' -and $evidence.packages[3].sha256 -eq $evidence.packages[0].sha256) 'Evidence includes universal public name and compatible update packages'
 Assert ($evidence.packages[0].minBuild -eq 17763 -and $null -eq $evidence.packages[0].maxBuild -and $evidence.packages[1].maxBuild -eq 21999 -and $evidence.packages[2].minBuild -eq 22000) 'Evidence records exact OS build boundaries'
-Assert (@(Get-Content -LiteralPath (Join-Path $evidenceRoot 'SHA256SUMS.txt')).Count -eq 5) 'SHA256SUMS covers all three installers and two reports'
+Assert (@(Get-Content -LiteralPath (Join-Path $evidenceRoot 'SHA256SUMS.txt')).Count -eq 6) 'SHA256SUMS covers all public installers and two reports'
 Assert ($evidence.publishedFiles.path -contains 'FileHashes.json') 'Shared payload evidence includes file hashes'
 # Проверяем ровно функцию gate из Release.ps1, не выполняя команды выпуска.
 $releaseTokens=$null;$releaseErrors=$null

@@ -5,8 +5,10 @@ $project=[xml](Get-Content -LiteralPath (Join-Path $repo 'ClipShot/ClipShot.cspr
 $version=[string]$project.Project.PropertyGroup.Version
 $installer=Get-Item -LiteralPath $Setup
 if($installer.Name -ne "ClipShot-Setup-$version.exe"){throw 'Версия установщика не совпадает с исходниками.'}
-$packages=@(foreach($flavor in 'legacy','win10','win11'){
-    $name=switch($flavor){'legacy'{"ClipShot-Setup-$version.exe"};'win10'{"ClipShot-Win10-Setup-$version.exe"};'win11'{"ClipShot-Win11-Setup-$version.exe"}}
+$universal=Join-Path $installer.DirectoryName "ClipShot-$version.exe"
+if((Get-FileHash -LiteralPath $universal).Hash -ne (Get-FileHash -LiteralPath $installer.FullName).Hash){throw 'Публичный универсальный пакет отличается от проверенного legacy-пакета.'}
+$packages=@(foreach($flavor in 'legacy','win10','win11','universal'){
+    $name=switch($flavor){'legacy'{"ClipShot-Setup-$version.exe"};'win10'{"ClipShot-Win10-Setup-$version.exe"};'win11'{"ClipShot-Win11-Setup-$version.exe"};'universal'{"ClipShot-$version.exe"}}
     $package=Get-Item -LiteralPath (Join-Path $installer.DirectoryName $name)
     [ordered]@{file=$name;bytes=$package.Length;sha256=(Get-FileHash -LiteralPath $package.FullName).Hash.ToLowerInvariant();flavor=$flavor;minBuild=$(if($flavor -eq 'win11'){22000}else{17763});maxBuild=$(if($flavor -eq 'win10'){21999}else{$null})}
 })

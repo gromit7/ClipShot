@@ -33,6 +33,10 @@ do{
 }while($true)
 $setup=Join-Path $repo "ClipShot-Setup-$version.exe"
 $setups=@($setup,(Join-Path $repo "ClipShot-Win10-Setup-$version.exe"),(Join-Path $repo "ClipShot-Win11-Setup-$version.exe"))
+$universal=Join-Path $repo "ClipShot-$version.exe"
+Copy-Item -LiteralPath $setup -Destination $universal -Force
+if((Get-FileHash -LiteralPath $setup).Hash -ne (Get-FileHash -LiteralPath $universal).Hash){throw 'Универсальный установщик не совпадает с проверенным пакетом.'}
+$setups+=@($universal)
 & (Join-Path $PSScriptRoot 'New-ReleaseEvidence.ps1') -Setup $setup -MakeNsis $MakeNsis
 $assets=$setups+@((Join-Path $repo 'SHA256SUMS.txt'),(Join-Path $repo "ClipShot-$version-buildinfo.json"),(Join-Path $repo "ClipShot-$version-checks.json"))
 function Confirm-Packages($Release,[string[]]$Paths){
@@ -62,4 +66,4 @@ Confirm-Packages $latest $setups
 & (Join-Path $PSScriptRoot 'Publish-Mirror.ps1') -Version $version
 & (Join-Path $PSScriptRoot 'Publish-UpdateFeed.ps1') -ExpectedVersion $version -Publish -PrivateRepository:$privateRepository
 & (Join-Path $PSScriptRoot 'Publish-Installer.ps1') -Setup $setup
-Write-Output "Выпущен ClipShot ${version}: GitHub и зеркало содержат три проверенных пакета; лента выбирает Windows 10/11, на D сохранены два явных установщика."
+Write-Output "Выпущен ClipShot ${version}: единый ClipShot-$version.exe для Windows 10/11 опубликован на GitHub, зеркале и D; совместимые имена сохранены для старых обновляторов."

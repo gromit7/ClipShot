@@ -69,6 +69,10 @@ try{
         }
         Step 'Compile versioned installer' {& (Join-Path $repo 'ClipShot/build-installer.ps1') -MakeNsis $MakeNsis -NoLatestCopy}
         $setup=Join-Path $repo "ClipShot-Setup-$version.exe"
+        Step 'Unified installer preserves verified universal payload' {
+            $universal=Join-Path $repo "ClipShot-$version.exe"
+            if((Get-FileHash -LiteralPath $setup).Hash -ne (Get-FileHash -LiteralPath $universal).Hash){throw 'Universal public name differs from verified installer.'}
+        }
         $wrappers=@(
             @{Flavor='legacy';Path=$setup;Min=17763;Max=[int]::MaxValue},
             @{Flavor='win10';Path=(Join-Path $repo "ClipShot-Win10-Setup-$version.exe");Min=17763;Max=21999},

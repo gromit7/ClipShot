@@ -5,7 +5,7 @@ $source=Get-Content -LiteralPath $sourcePath -Raw
 $errors=$null;$tokens=$null
 $ast=[Management.Automation.Language.Parser]::ParseInput($source,[ref]$tokens,[ref]$errors)
 if($errors.Count){throw 'Publisher has PowerShell parser errors.'}
-foreach($name in 'Confirm-LocalRelease','Confirm-AssetRedirect','Get-PrivateAssetUrls'){
+foreach($name in 'Installer-Names','Confirm-LocalRelease','Confirm-AssetRedirect','Get-PrivateAssetUrls'){
     $function=$ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name},$true)
     if($null -eq $function){throw 'Missing publisher validation function.'}
     Invoke-Expression $function.Extent.Text

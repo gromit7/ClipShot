@@ -7,13 +7,16 @@ $ErrorActionPreference='Stop'
 if(-not $RemoteExecutorPath -or -not(Test-Path -LiteralPath $RemoteExecutorPath -PathType Leaf)){throw 'Set CLIPSHOT_MIRROR_EXECUTOR to the private, configured Gateway executor.'}
 # Публичный файл не содержит SSH-реквизитов. Исполнитель получает только команду.
 # Latest JSON/ZIP переключаются одним symlink после проверки официального SHA.
+function Installer-Names($Release,[string]$ReleaseVersion){
+    @("ClipShot-Setup-$ReleaseVersion.exe","ClipShot-Win10-Setup-$ReleaseVersion.exe","ClipShot-Win11-Setup-$ReleaseVersion.exe")
+    if(@($Release.assets|Where-Object name -CEQ "ClipShot-$ReleaseVersion.exe").Count){"ClipShot-$ReleaseVersion.exe"}
+}
 
 function Confirm-LocalRelease([string]$Json,[string]$ReleaseVersion){
     if([Text.Encoding]::UTF8.GetByteCount($Json) -gt 1048576){throw 'Release metadata too large.'}
     try{$release=$Json|ConvertFrom-Json}catch{throw 'Invalid local release metadata.'}
     if($release.draft -isnot [bool] -or $release.draft -or $release.prerelease -isnot [bool] -or $release.prerelease -or $release.tag_name -cne "v$ReleaseVersion"){throw 'Official published stable release required.'}
-    foreach($prefix in 'ClipShot','ClipShot-Win10','ClipShot-Win11'){
-        $name="$prefix-Setup-$ReleaseVersion.exe"
+    foreach($name in (Installer-Names $release $ReleaseVersion)){
         $assets=@($release.assets|Where-Object name -CEQ $name)
         if($assets.Count -ne 1){throw 'One official installer per OS required.'}
         $asset=$assets[0]
@@ -44,8 +47,8 @@ function Get-PrivateAssetUrls($Release,[string]$ReleaseVersion){
         $handler=[System.Net.Http.HttpClientHandler]::new();$handler.AllowAutoRedirect=$false
         $client=[System.Net.Http.HttpClient]::new($handler);$client.Timeout=[TimeSpan]::FromSeconds(30)
         $urls=@{}
-        foreach($prefix in 'ClipShot','ClipShot-Win10','ClipShot-Win11'){
-            $name="$prefix-Setup-$ReleaseVersion.exe";$asset=@($Release.assets|Where-Object name -CEQ $name)[0]
+        foreach($name in (Installer-Names $Release $ReleaseVersion)){
+            $asset=@($Release.assets|Where-Object name -CEQ $name)[0]
             # The endpoint is constructed locally from a validated numeric asset ID.
             $request=[System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Get,"https://api.github.com/repos/gromit7/ClipShot/releases/assets/$($asset.id)")
             $response=$null
@@ -128,6 +131,13 @@ def official_packages(release,version):
         digest=asset.get('digest','');size=asset.get('size',0)
         if asset.get('state')!='uploaded' or asset.get('browser_download_url')!=url or not re.fullmatch(r'sha256:[a-fA-F0-9]{64}',digest) or not 1024<=size<=262144000:raise ValueError('Invalid official asset: '+flavor)
         packages.append({'flavor':flavor,'name':name,'size':size,'sha256':digest[7:].lower(),'url':url})
+    unified=f'ClipShot-{version}.exe'
+    aliases=[asset for asset in release['assets'] if asset.get('name')==unified]
+    if aliases:
+        if len(aliases)!=1:raise ValueError('Duplicate universal installer')
+        alias=aliases[0];legacy=packages[0];url=f'https://github.com/{REPO}/releases/download/v{version}/{unified}'
+        if alias.get('state')!='uploaded' or alias.get('browser_download_url')!=url or alias.get('size')!=legacy['size'] or alias.get('digest','').lower()!='sha256:'+legacy['sha256']:raise ValueError('Universal installer must match verified legacy bytes')
+        packages.append({'flavor':'universal','name':unified,'size':legacy['size'],'sha256':legacy['sha256'],'url':url})
     return packages
 
 def package_valid(root,package):
@@ -229,12 +239,17 @@ foreach($result in $sshResults){if($result.Groups[1].Value.Trim() -ne '0'){throw
 $records=@([regex]::Matches($text,'(?m)^\{[^\r\n]*\}\s*$')|ForEach-Object {try{$_.Value|ConvertFrom-Json}catch{}})
 $record=$records|Where-Object { $_.verification -eq 'clipshot-mirror-v1' -and $_.version -eq $Version -and $_.mode -eq $mode }|Select-Object -Last 1
 if(-not $record -or $record.sha256 -notmatch '^[a-f0-9]{64}$'){throw 'Remote mirror verification result is missing.'}
-if(@($record.packages).Count -ne 3){throw 'Mirror verification must include all three OS packages.'}
+$hasUniversal=@((Installer-Names ($releaseJson|ConvertFrom-Json) $Version)).Count -eq 4
+if(@($record.packages).Count -ne $(if($hasUniversal){4}else{3})){throw 'Mirror verification must include all published installers.'}
 foreach($flavor in 'legacy','win10','win11'){
     $prefix=switch($flavor){'legacy'{'ClipShot'};'win10'{'ClipShot-Win10'};'win11'{'ClipShot-Win11'}}
     $matching=@($record.packages | Where-Object flavor -eq $flavor)
     if($matching.Count -ne 1 -or $matching[0].name -cne "$prefix-Setup-$Version.exe" -or $matching[0].sha256 -notmatch '^[a-f0-9]{64}$' -or $matching[0].size -lt 1024 -or $matching[0].size -gt 262144000 -or $matching[0].url -cne "https://bot.data-clouds.ru/clipshot/v$Version/$prefix-Setup-$Version.exe"){throw "Invalid mirror OS package: $flavor"}
     if(-not $CheckOnly -and -not $matching[0].verified){throw "Unverified mirrored OS package: $flavor"}
+}
+if($hasUniversal){
+    $alias=@($record.packages|Where-Object flavor -eq 'universal');$legacy=@($record.packages|Where-Object flavor -eq 'legacy')[0]
+    if($alias.Count -ne 1 -or $alias[0].name -cne "ClipShot-$Version.exe" -or $alias[0].size -ne $legacy.size -or $alias[0].sha256 -cne $legacy.sha256 -or $alias[0].url -cne "https://bot.data-clouds.ru/clipshot/v$Version/ClipShot-$Version.exe" -or (-not $CheckOnly -and -not $alias[0].verified)){throw 'Unverified universal installer alias.'}
 }
 if(-not $CheckOnly -and (-not $record.verified_package -or -not $record.latest_zip_verified -or $record.latest_json_tag -ne "v$Version")){throw 'Published installer/latest pair is not verified.'}
 $record|ConvertTo-Json -Compress
