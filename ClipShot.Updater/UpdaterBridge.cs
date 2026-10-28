@@ -33,6 +33,11 @@ internal sealed class UpdaterBridge : IDisposable
             if(oldPid<=0||oldPid==pid||oldPid==Environment.ProcessId)throw new InvalidDataException("Invalid updater parent");
             using var setup=Process.GetProcessById(pid);
             using var oldUpdater=Process.GetProcessById(oldPid);
+            // GetProcessById сам по себе не удерживает дескриптор. После ACK
+            // родители быстро завершаются; ленивое открытие после их выхода
+            // иногда оставляло ExitCode недоступным. Удерживаем оба HANDLE
+            // до ACK и проверяем коды именно этих процессов, без повторного PID lookup.
+            _=setup.SafeHandle;_=oldUpdater.SafeHandle;
             if(!oldUpdater.ProcessName.Equals("ClipShot.Updater",StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("Unexpected updater parent");
             bridge.token=Mutex.OpenExisting(tokenName);bridge.ready=EventWaitHandle.OpenExisting(eventName);
             bridge.image=new FileStream(installer,FileMode.Open,FileAccess.Read,FileShare.Read);
@@ -48,6 +53,9 @@ internal sealed class UpdaterBridge : IDisposable
             using(var deadline=new CancellationTokenSource(TimeSpan.FromMinutes(2)))
             {
                 await setup.WaitForExitAsync(deadline.Token);
+                // Регрессия форсирует завершение старого runner до нашего Wait.
+                // Производственный запуск без проверенного testRoot это игнорирует.
+                if(testRoot is not null&&Environment.GetEnvironmentVariable("CLIPSHOT_TEST_BRIDGE_WAIT_DELAY")=="1")await Task.Delay(1000,deadline.Token);
                 await oldUpdater.WaitForExitAsync(deadline.Token);
             }
             if(setup.ExitCode!=4||oldUpdater.ExitCode!=4)throw new InvalidDataException("Bridge was not deferred by parent");

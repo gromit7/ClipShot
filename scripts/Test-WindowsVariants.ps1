@@ -87,6 +87,18 @@ Assert ($evidence.packages[0].minBuild -eq 17763 -and $null -eq $evidence.packag
 Assert (@(Get-Content -LiteralPath (Join-Path $evidenceRoot 'SHA256SUMS.txt')).Count -eq 6) 'SHA256SUMS covers all public installers and two reports'
 Assert ($evidence.publishedFiles.path -contains 'FileHashes.json') 'Shared payload evidence includes file hashes'
 # Проверяем ровно функцию gate из Release.ps1, не выполняя команды выпуска.
+$releaseSource=Get-Content -LiteralPath (Join-Path $repo 'scripts/Release.ps1') -Raw
+$resumeAst=[Management.Automation.Language.Parser]::ParseInput($releaseSource,[ref]$null,[ref]$null)
+$resumeFunction=$resumeAst.Find({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Confirm-UnpublishedDraft'},$true)
+Invoke-Expression $resumeFunction.Extent.Text
+$draftFixture=@{draft=$true;published_at=$null;tag_name='v9.8.7'}
+Confirm-UnpublishedDraft $draftFixture $false 'v9.8.7'
+Assert $true 'Interrupted unpublished draft without a Git tag can resume'
+Must-Fail {Confirm-UnpublishedDraft $draftFixture $true 'v9.8.7'} 'Existing Git tag blocks draft overwrite'
+$draftFixture.published_at='2026-01-01T00:00:00Z'
+Must-Fail {Confirm-UnpublishedDraft $draftFixture $false 'v9.8.7'} 'Previously published release cannot be overwritten even if converted to draft'
+$draftFixture.published_at=$null;$draftFixture.draft=$false
+Must-Fail {Confirm-UnpublishedDraft $draftFixture $false 'v9.8.7'} 'Published release is immutable'
 $releaseTokens=$null;$releaseErrors=$null
 $releaseAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $repo 'scripts/Release.ps1'),[ref]$releaseTokens,[ref]$releaseErrors)
 $confirm=$releaseAst.FindAll({param($node)$node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Confirm-Packages'},$true)|Select-Object -First 1

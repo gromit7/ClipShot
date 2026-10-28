@@ -2,6 +2,9 @@ param([Parameter(Mandatory=$true)][string]$MakeNsis,[Parameter(Mandatory=$true)]
 $ErrorActionPreference='Stop'
 $repo=Split-Path $PSScriptRoot
 function GitHub([string[]]$Arguments){$value=& gh @Arguments;if($LASTEXITCODE -ne 0){throw "GitHub CLI: $($Arguments[0]) завершился с ошибкой"};return $value}
+function Confirm-UnpublishedDraft($Release,[bool]$TagExists,[string]$ExpectedTag){
+    if($Release.draft -isnot [bool] -or -not $Release.draft -or $null -ne $Release.published_at -or $TagExists -or $Release.tag_name -cne $ExpectedTag){throw 'Продолжать можно только никогда не опубликованный черновик без существующего Git-тега.'}
+}
 if(& git -C $repo status --porcelain){throw 'Перед выпуском нужен чистый коммит.'}
 $commit=(& git -C $repo rev-parse HEAD).Trim()
 $project=[xml](Get-Content -LiteralPath (Join-Path $repo 'ClipShot/ClipShot.csproj') -Raw)
@@ -13,8 +16,14 @@ $privateRepository=$repositoryInfo.visibility -eq 'PRIVATE'
 if(-not $env:CLIPSHOT_MIRROR_EXECUTOR -or -not(Test-Path -LiteralPath $env:CLIPSHOT_MIRROR_EXECUTOR -PathType Leaf)){
     throw 'Для выпуска настройте CLIPSHOT_MIRROR_EXECUTOR: приватный исполнитель публикации российского зеркала.'
 }
-$existing=& gh release view $tag --repo $repository --json tagName 2>$null
-if($LASTEXITCODE -eq 0){throw 'Выпущенные версии неизменяемы. Увеличьте версию.'}
+$resumeDraft=$null
+$existing=& gh release view $tag --repo $repository --json databaseId 2>$null
+if($LASTEXITCODE -eq 0){
+    $resumeDraft=($existing|ConvertFrom-Json).databaseId
+    $draft=GitHub -Arguments @('api',"repos/$repository/releases/$resumeDraft")|ConvertFrom-Json
+    $refs=@(& git -C $repo ls-remote --tags origin "refs/tags/$tag");if($LASTEXITCODE -ne 0){throw 'Не удалось проверить неизменяемость Git-тега.'}
+    Confirm-UnpublishedDraft $draft ($refs.Count -gt 0) $tag
+}
 # Рабочий дистрибутив на D остаётся прежним до подтверждения GitHub.
 & (Join-Path $PSScriptRoot 'Test-Release.ps1') -MakeNsis $MakeNsis
 & git -C $repo push origin main
@@ -52,10 +61,26 @@ function Confirm-Packages($Release,[string[]]$Paths){
     }
 }
 # Черновик не попадёт к обновлятору. Полный SHA связывает выпуск с исходниками.
-GitHub -Arguments (@('release','create',$tag,'--repo',$repository,'--target',$commit,'--title',"ClipShot $version",'--notes-file',$NotesFile,'--draft')+$assets) | Write-Output
+if($null -ne $resumeDraft){
+    $draft=GitHub -Arguments @('api',"repos/$repository/releases/$resumeDraft")|ConvertFrom-Json
+    $refs=@(& git -C $repo ls-remote --tags origin "refs/tags/$tag");if($LASTEXITCODE -ne 0){throw 'Не удалось повторно проверить Git-тег.'}
+    Confirm-UnpublishedDraft $draft ($refs.Count -gt 0) $tag
+    # Не переводим выпуск обратно в draft: параллельная публикация должна
+    # остановить продолжение, а не разрешить замену public assets.
+    GitHub -Arguments @('release','edit',$tag,'--repo',$repository,'--target',$commit,'--title',"ClipShot $version",'--notes-file',$NotesFile)|Write-Output
+    $draft=GitHub -Arguments @('api',"repos/$repository/releases/$resumeDraft")|ConvertFrom-Json
+    $refs=@(& git -C $repo ls-remote --tags origin "refs/tags/$tag");if($LASTEXITCODE -ne 0){throw 'Не удалось проверить Git-тег перед upload.'}
+    Confirm-UnpublishedDraft $draft ($refs.Count -gt 0) $tag
+    GitHub -Arguments (@('release','upload',$tag,'--repo',$repository,'--clobber')+$assets)|Write-Output
+}else{
+    GitHub -Arguments (@('release','create',$tag,'--repo',$repository,'--target',$commit,'--title',"ClipShot $version",'--notes-file',$NotesFile,'--draft')+$assets)|Write-Output
+}
 # У черновика ещё нет публичного тега: проверяем по ID, а не через releases/tags.
 $releaseId=(GitHub -Arguments @('release','view',$tag,'--repo',$repository,'--json','databaseId','--jq','.databaseId')).Trim()
 $release=GitHub -Arguments @('api',"repos/$repository/releases/$releaseId") | ConvertFrom-Json
+$refs=@(& git -C $repo ls-remote --tags origin "refs/tags/$tag");if($LASTEXITCODE -ne 0){throw 'Не удалось проверить Git-тег перед публикацией.'}
+Confirm-UnpublishedDraft $release ($refs.Count -gt 0) $tag
+if($release.target_commitish -cne $commit){throw 'Черновик не указывает на проверенный source-коммит.'}
 Confirm-Packages $release $setups
 GitHub -Arguments @('release','edit',$tag,'--repo',$repository,'--draft=false','--latest') | Write-Output
 $latest=GitHub -Arguments @('api',"repos/$repository/releases/latest") | ConvertFrom-Json

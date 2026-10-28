@@ -50,7 +50,9 @@ try{
     $arguments='"'+$package+'" "'+$hash+'" "'+$app+'" "--test-root='+$root+'"'
     # Это существенная часть регрессии: старый runner удерживает App как CWD.
     # Без моста тот же официальный updater завершается exit1 и возвращает 0.7.4.
-    Run $runner $arguments $appDir 4
+    $oldDelay=$env:CLIPSHOT_TEST_BRIDGE_WAIT_DELAY
+    try{$env:CLIPSHOT_TEST_BRIDGE_WAIT_DELAY='1';Run $runner $arguments $appDir 4}
+    finally{$env:CLIPSHOT_TEST_BRIDGE_WAIT_DELAY=$oldDelay}
     $log=Join-Path $updates 'updater-log.jsonl';$deadline=[DateTime]::UtcNow.AddSeconds(180);$done=$false
     while([DateTime]::UtcNow -lt $deadline){
         if(Test-Path -LiteralPath $log){
@@ -61,6 +63,11 @@ try{
         Start-Sleep -Milliseconds 100
     }
     if(-not $done){throw 'Bridge did not report completion'}
+    Start-Sleep -Milliseconds 1200
+    $survivors=@(Get-CimInstance Win32_Process -Filter "Name='ClipShot.exe'" | Where-Object {$_.ExecutablePath -eq $app})
+    if($survivors.Count -ne 1){throw 'Updated app did not survive updater completion'}
+    $survivor=Get-Process -Id $survivors[0].ProcessId -ErrorAction Stop
+    if($survivor.HasExited){throw 'Updated app exited after updater completion'}
     Stop-TestApp
     $expected=(Get-Item -LiteralPath (Join-Path $Publication 'ClipShot.exe')).VersionInfo.ProductVersion
     if((Get-Item -LiteralPath $app).VersionInfo.ProductVersion -ne $expected){throw 'Old updater did not install the new version'}
@@ -76,7 +83,7 @@ try{
     $badMarker=Join-Path $forbidden 'health.txt'
     Run $app ('--upgrade-self-test --background --update-health-test --update-health-file="'+$badMarker+'"') $updates
     if(Test-Path -LiteralPath $badMarker){throw 'Isolated health marker escaped its exact Updates directory'}
-    $report='PASS official 0.7.4 updater with App CWD hands off, installs verified new payload, confirms real isolated health and preserves history/templates/settings'
+    $report='PASS official 0.7.4 updater with App CWD hands off after forced parent-exit delay, installs verified payload, survives updater exit and notice closure, preserves history/templates/settings'
     Set-Content -LiteralPath (Join-Path (Split-Path $PSScriptRoot) 'TestResults/legacy-updater-bridge-checks.txt') -Value $report
     $report
 }finally{try{Stop-TestApp}finally{$env:CLIPSHOT_TEST_ROOT=$saved}}
