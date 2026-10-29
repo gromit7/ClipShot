@@ -452,8 +452,14 @@ Function CloseClipShot
   ${EndIf}
 FunctionEnd
 
+!include "DesktopShortcut.nsh"
+
 Section "Приложение ClipShot" SecMain
   SectionIn RO
+  Call SnapshotDesktopShortcut
+  ${If} $PreviousInstallation == "1"
+    StrCpy $InstallResult "updated"
+  ${EndIf}
   Call CloseClipShot
   Call PrepareInstallTransaction
   SetOutPath "$INSTDIR"
@@ -503,10 +509,7 @@ Section "Приложение ClipShot" SecMain
 SectionEnd
 
 Section "Ярлык на рабочем столе" SecDesktop
-  ${If} $TestRoot == ""
-  Delete "$DESKTOP\ClipNest.lnk"
-  CreateShortcut "$DESKTOP\ClipShot.lnk" "$INSTDIR\ClipShot.exe" "" "$INSTDIR\Assets\ClipShot.ico"
-  ${EndIf}
+  Call ApplyDesktopShortcut
 SectionEnd
 
 Section "Uninstall"

@@ -58,6 +58,7 @@ try{
     }
     if($MakeNsis){
         if($SkipDesktop -and $PublishInstaller){throw 'Desktop and installer checks must pass before publishing an installer.'}
+        Step 'Desktop shortcut choice and legacy migration' {& (Join-Path $PSScriptRoot 'Test-DesktopShortcut.ps1') -MakeNsis $MakeNsis}
         Step 'Synthetic OS package publication contracts' {& (Join-Path $PSScriptRoot 'Test-WindowsVariants.ps1')}
         Step 'Synthetic private mirror publication contracts' {& (Join-Path $PSScriptRoot 'Test-PrivateMirrorProducer.ps1')}
         Step 'Synthetic origin feed receipt contracts' {& (Join-Path $PSScriptRoot 'Test-OriginFeedWrapper.ps1')}
@@ -115,6 +116,8 @@ try{
                 Process-Checked $win11.Path $variantArgs 120000
                 $variantDir=Join-Path $variantRoot 'App'
                 $variantApp=Join-Path $variantDir 'ClipShot.exe'
+                $variantShortcut=Join-Path $variantRoot 'Desktop/ClipShot.lnk'
+                if(-not(Test-Path -LiteralPath $variantShortcut)){throw 'First install did not create the isolated desktop shortcut.'}
                 $savedRoot=$env:CLIPSHOT_TEST_ROOT
                 try{
                     $env:CLIPSHOT_TEST_ROOT=Join-Path $variantRoot 'Data'
@@ -124,7 +127,12 @@ try{
                     # Варианты должны обновляться друг поверх друга без смены
                     # схемы, путей данных, single-instance mutex и полезной нагрузки.
                     Process-Checked $setup $variantArgs 120000
+                    if(-not(Test-Path -LiteralPath $variantShortcut)){throw 'Upgrade lost the existing desktop shortcut.'}
+                    Move-Item -LiteralPath $variantShortcut -Destination (Join-Path $variantRoot 'removed-shortcut.lnk')
                     Process-Checked $win11.Path $variantArgs 120000
+                    if(Test-Path -LiteralPath $variantShortcut){throw 'Upgrade restored a removed desktop shortcut.'}
+                    Process-Checked $setup ($variantArgs+' /AUTOMATIC') 120000
+                    if(Test-Path -LiteralPath $variantShortcut){throw 'Automatic repeat upgrade restored a removed desktop shortcut.'}
                     if((Get-FileHash -LiteralPath $database).Hash -ne $before){throw 'Switching legacy to Win11 changed user data.'}
                     $manifest=Get-Content -LiteralPath (Join-Path $publication 'FileHashes.json') -Raw | ConvertFrom-Json -AsHashtable
                     foreach($entry in $manifest.GetEnumerator()){
