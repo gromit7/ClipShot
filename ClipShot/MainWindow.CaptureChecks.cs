@@ -17,6 +17,10 @@ public sealed partial class MainWindow
         string report=Path.Combine(dataFolder,"capture-checks.txt");
         try
         {
+            // Check the running published app, not merely the manifest source.
+            // An unaware capture thread virtualizes pixels on scaled displays.
+            if(!Native.AreDpiAwarenessContextsEqual(Native.GetThreadDpiAwarenessContext(),(nint)(-4)))
+                throw new InvalidOperationException("Capture UI thread is not PerMonitorV2 DPI aware");
             byte[] pixels=new byte[800*600*4];for(int y=0;y<600;y++)for(int x=0;x<800;x++){int i=(y*800+x)*4;pixels[i]=(byte)(x%256);pixels[i+1]=(byte)(y%256);pixels[i+2]=100;pixels[i+3]=255;}
             // SetCursor is thread-local until this window owns mouse input. A
             // fixed (0,0) fixture could leave the stationary hardware pointer over
@@ -59,7 +63,7 @@ public sealed partial class MainWindow
             CursorCheck(cancelWindow,"Repeated capture did not install its cursor");
             cancelWindow.Cancel();if(await cancel is not null)throw new InvalidOperationException("Cancel mismatch");
             if(previousCursor!=0&&CaptureSelectionCursor.CurrentHandle!=previousCursor)throw new InvalidOperationException("Cancelled capture did not restore its previous cursor");
-            File.WriteAllText(report,$"PASS selection {selection.Width}x{selection.Height}; immediate stationary native/XAML crosshair; cursor preserved during drawing; cursor restored after completion and cancel; PNG roundtrip; history; no desktop or clipboard access");
+            File.WriteAllText(report,$"PASS PerMonitorV2 capture thread; window DPI={Native.GetDpiForWindow(hwnd)}; selection {selection.Width}x{selection.Height}; immediate stationary native/XAML crosshair; cursor preserved during drawing; cursor restored after completion and cancel; PNG roundtrip; history; no desktop or clipboard access");
         }
         catch(Exception e){Environment.ExitCode=1;File.WriteAllText(report,$"FAIL {e.GetType().Name}: {e.Message}");}
         Quit();

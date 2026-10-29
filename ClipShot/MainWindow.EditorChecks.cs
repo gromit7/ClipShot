@@ -5,7 +5,14 @@ public sealed partial class MainWindow
     {
         try
         {
-            var image=store.All().First(c=>c.Image is not null);
+            var fixture=new ScreenFrame(0,0,16000,600,Enumerable.Repeat((byte)255,16000*600*4).ToArray());
+            // High-frequency synthetic detail catches whole-image resampling;
+            // no real screenshot or clipboard data participates in this test.
+            for(int y=400;y<fixture.Height;y++)for(int x=0;x<fixture.Width;x++)
+            {int i=(y*fixture.Width+x)*4;byte v=(byte)((x+y)%2==0?0:255);fixture.Pixels[i]=fixture.Pixels[i+1]=fixture.Pixels[i+2]=v;}
+            fixture=AnnotationRenderer.Render(fixture,[new(MarkTool.Text,new(24,180),new(24,180),"Синтетический текст · 0123456789 · тонкие детали",Color:"#111111",Width:1)]);
+            var fixturePng=await DesktopCapture.Png(fixture);store.Add("image","",image:fixturePng);
+            var image=store.All().Single(c=>c.Image is not null&&c.Image.SequenceEqual(fixturePng));
             var editing=EditImage(image);for(int attempt=0;attempt<30&&editor is null;attempt++)await Task.Delay(100);
             var testedEditor=editor??throw new InvalidOperationException("Editor did not open");var result=testedEditor.ShowAsync();
             if(interactive){await editing;if(!exiting)ShowNearCursor();return;}

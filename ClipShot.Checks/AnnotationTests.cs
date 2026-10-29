@@ -3,6 +3,20 @@ using Xunit;
 namespace ClipShot.Checks;
 public sealed class AnnotationTests
 {
+    [Fact]
+    public void Arrow_preserves_one_pixel_detail_outside_its_bounds()
+    {
+        // Alternating pixels expose resampling that a flat white fixture misses.
+        const int width=401,height=239;var pixels=new byte[width*height*4];
+        for(int y=0;y<height;y++)for(int x=0;x<width;x++)
+        {int i=(y*width+x)*4;pixels[i]=pixels[i+1]=pixels[i+2]=(byte)((x+y)%2==0?0:255);pixels[i+3]=255;}
+        var source=new ScreenFrame(0,0,width,height,pixels);var original=pixels.ToArray();
+        var result=AnnotationRenderer.Render(source,[new(MarkTool.Arrow,new(20,20),new(180,20),Width:4)]);
+        Assert.Equal(width,result.Width);Assert.Equal(height,result.Height);
+        Assert.Equal(original,pixels);
+        Assert.Equal(original.Skip(width*50*4),result.Pixels.Skip(width*50*4));
+        Assert.False(original.SequenceEqual(result.Pixels));
+    }
     [Theory][InlineData(90,3,90,0)][InlineData(2,90,0,90)][InlineData(-90,-2,-90,0)][InlineData(-2,-90,0,-90)]
     public void Arrow_snaps_near_horizontal_and_vertical(double x,double y,double expectedX,double expectedY){var p=AnnotationGeometry.SnapArrow(new(0,0),new(x,y));Assert.Equal(expectedX,p.X,6);Assert.Equal(expectedY,p.Y,6);}
     [Fact] public void Arrow_keeps_free_angle_away_from_guides(){var end=new ImagePoint(80,30);Assert.Equal(end,AnnotationGeometry.SnapArrow(new(0,0),end));}

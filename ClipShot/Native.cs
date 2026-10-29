@@ -34,6 +34,8 @@ internal static class Native
     }
     internal static KeyboardInput KeyInput(ushort key,bool up)=>new(){Type=1,Key=key,Flags=up?2u:0u};
     [DllImport("user32.dll")] internal static extern uint GetDpiForWindow(nint h);
+    [DllImport("user32.dll")] internal static extern nint GetThreadDpiAwarenessContext();
+    [DllImport("user32.dll")] internal static extern bool AreDpiAwarenessContextsEqual(nint first,nint second);
     [DllImport("user32.dll")] internal static extern bool SetForegroundWindow(nint h);
     [DllImport("user32.dll")] internal static extern nint LoadIcon(nint instance,nint name);
     [DllImport("user32.dll",CharSet=CharSet.Unicode,SetLastError=true)] internal static extern nint LoadImage(nint instance,string name,uint type,int cx,int cy,uint flags);

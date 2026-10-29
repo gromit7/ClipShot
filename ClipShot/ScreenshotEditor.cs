@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
@@ -23,12 +23,18 @@ internal sealed partial class ScreenshotEditor : Window
     private sealed class AimCanvas:Canvas {internal AimCanvas(){ProtectedCursor=Microsoft.UI.Input.InputSystemCursor.Create(Microsoft.UI.Input.InputSystemCursorShape.Cross);}}
     private readonly AimCanvas surface=new();
     private readonly Image image=new(){Stretch=Stretch.Fill};
+    private readonly ScrollViewer viewport=new(){ZoomMode=ZoomMode.Enabled,MinZoomFactor=.1f,MaxZoomFactor=8,
+        HorizontalScrollBarVisibility=ScrollBarVisibility.Auto,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
+    private readonly Viewbox imageView=new(){Stretch=Stretch.Fill};
+    private XamlRoot? observedRoot;
+    private double displayScale=1,lastRasterScale=1;
+    private bool fitImage=true;
     private readonly Canvas guides=new(){IsHitTestVisible=false};
     private readonly TextBlock status=new(){Margin=new Thickness(16,8,16,10),TextWrapping=TextWrapping.Wrap,Opacity=.75,FontSize=12};
     private readonly TaskCompletionSource<byte[]?> completion=new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly Dictionary<MarkTool,AppBarToggleButton> tools=new();
     private readonly AppBarButton undo=new(),redo=new();
-    private readonly CommandBar toolbar=new(){DefaultLabelPosition=CommandBarDefaultLabelPosition.Bottom,IsDynamicOverflowEnabled=false,OverflowButtonVisibility=CommandBarOverflowButtonVisibility.Collapsed,Width=1000};
+    private readonly CommandBar toolbar=new(){IsOpen=true,IsSticky=true,DefaultLabelPosition=CommandBarDefaultLabelPosition.Bottom,IsDynamicOverflowEnabled=false,OverflowButtonVisibility=CommandBarOverflowButtonVisibility.Collapsed,Width=1000};
     private readonly AppBarButton copy=new();
     private MarkTool tool=MarkTool.Arrow;
     private ImagePoint start,end;
@@ -58,11 +64,20 @@ internal sealed partial class ScreenshotEditor : Window
         root.Children.Add(new Viewbox{Child=bar,Stretch=Stretch.Uniform,StretchDirection=StretchDirection.DownOnly,HorizontalAlignment=HorizontalAlignment.Stretch});
         surface.Width=source.Width;surface.Height=source.Height;surface.Background=new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         image.Width=source.Width;image.Height=source.Height;surface.Children.Add(image);surface.Children.Add(guides);SetImage(source);
-        var viewbox=new Viewbox{Child=surface,Stretch=Stretch.Uniform,Margin=new Thickness(12)};Grid.SetRow(viewbox,1);root.Children.Add(viewbox);
-        Grid.SetRow(status,2);root.Children.Add(status);Hint();undo.IsEnabled=redo.IsEnabled=false;
+        // The scroll viewport changes display zoom only. Export always uses source
+        // pixels; 100% compensates XAML DIPs so one image pixel is one screen pixel.
+        imageView.Child=surface;viewport.Content=imageView;viewport.Margin=new Thickness(12);Grid.SetRow(viewport,1);root.Children.Add(viewport);
+        viewport.SizeChanged+=(_,_)=>{if(fitImage)SetImageZoom(true);};
+        viewport.Loaded+=(_,_)=>{observedRoot=root.XamlRoot;lastRasterScale=observedRoot.RasterizationScale;observedRoot.Changed+=RootScaleChanged;SetImageZoom(fitImage);};
+        viewport.ViewChanging+=(_,e)=>{if(Math.Abs(e.NextView.ZoomFactor-1)>.001)fitImage=false;};
+        var footer=new Grid();footer.ColumnDefinitions.Add(new(){Width=new(1,GridUnitType.Star)});footer.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
+        footer.Children.Add(status);var zoomButtons=new StackPanel{Orientation=Orientation.Horizontal,Spacing=6,Margin=new Thickness(8)};
+        var fit=new Button{Content=T("Вписать")};fit.Click+=(_,_)=>SetImageZoom(true);zoomButtons.Children.Add(fit);
+        var actual=new Button{Content="100%"};ToolTipService.SetToolTip(actual,T("Исходный размер: один пиксель снимка — один пиксель экрана"));actual.Click+=(_,_)=>SetImageZoom(false);zoomButtons.Children.Add(actual);
+        Grid.SetColumn(zoomButtons,1);footer.Children.Add(zoomButtons);Grid.SetRow(footer,2);root.Children.Add(footer);Hint();undo.IsEnabled=redo.IsEnabled=false;
         surface.PointerPressed+=Pressed;surface.PointerMoved+=Moved;surface.PointerReleased+=Released;surface.PointerCaptureLost+=(_,_)=>CancelDrag();
         root.AddHandler(UIElement.KeyDownEvent,new KeyEventHandler(KeyDown),true);CompositionTarget.Rendering+=DrawPending;
-        Closed+=(_,_)=>{closed=true;CompositionTarget.Rendering-=DrawPending;completion.TrySetResult(null);};
+        Closed+=(_,_)=>{closed=true;CompositionTarget.Rendering-=DrawPending;if(observedRoot is not null)observedRoot.Changed-=RootScaleChanged;completion.TrySetResult(null);};
         AppWindow.SetIcon(System.IO.Path.Combine(AppContext.BaseDirectory,"Assets","ClipShot.ico"));
         var area=DisplayArea.GetFromWindowId(AppWindow.Id,DisplayAreaFallback.Nearest).WorkArea;
         AppWindow.MoveAndResize(new RectInt32(area.X+Math.Max(0,(area.Width-1100)/2),area.Y+30,Math.Min(1100,area.Width-40),Math.Min(800,area.Height-60)));
@@ -78,6 +93,25 @@ internal sealed partial class ScreenshotEditor : Window
     internal Task<byte[]?> ShowAsync(){Activate();return completion.Task;}
     internal bool IsClosed=>closed;
     internal bool CanCapture=>!closed&&!busy&&!dialog&&!dragging;
+    private void SetImageZoom(bool fit)
+    {
+        fitImage=fit;double scale=root.XamlRoot?.RasterizationScale??1;
+        double zoom=fit?Math.Min(1/scale,Math.Min(viewport.ActualWidth/source.Width,viewport.ActualHeight/source.Height)):1/scale;
+        // Base layout scale has no ScrollViewer 10% floor: even panoramic shots
+        // fit. Native 100% resets the base, so its zoom range remains useful.
+        if(zoom>0){SetDisplayScale(zoom);viewport.UpdateLayout();viewport.ChangeView(0,0,1,true);fitImage=fit;}
+    }
+    private void SetDisplayScale(double scale){displayScale=scale;imageView.Width=source.Width*scale;imageView.Height=source.Height*scale;}
+    private void RootScaleChanged(XamlRoot sender,XamlRootChangedEventArgs args)
+    {
+        AdjustRasterScale(sender.RasterizationScale);
+    }
+    private void AdjustRasterScale(double scale)
+    {
+        if(Math.Abs(scale-lastRasterScale)<.001)return;
+        if(fitImage)SetImageZoom(true);else SetDisplayScale(displayScale*lastRasterScale/scale);
+        lastRasterScale=scale;
+    }
     private void SetImage(ScreenFrame frame){var bitmap=new WriteableBitmap(frame.Width,frame.Height);using(var stream=bitmap.PixelBuffer.AsStream())stream.Write(frame.Pixels);bitmap.Invalidate();image.Source=bitmap;}
     private ImagePoint Point(PointerRoutedEventArgs e){var p=e.GetCurrentPoint(surface).Position;return new ImagePoint(p.X,p.Y).Clamp(source.Width,source.Height);}
     private Annotation CurrentMark()
@@ -149,6 +183,8 @@ internal sealed partial class ScreenshotEditor : Window
     private async void KeyDown(object sender,KeyRoutedEventArgs e)
     {
         if(dialog)return;bool ctrl=(Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control)&Windows.UI.Core.CoreVirtualKeyStates.Down)!=0;
+        // Enter on a zoom button activates that button, not the global copy.
+        if(e.Key==VirtualKey.Enter&&(e.Handled||FocusManager.GetFocusedElement(root.XamlRoot) is Button))return;
         if(e.Key==VirtualKey.Escape){if(dragging)CancelDrag();else Close();e.Handled=true;}
         else if(e.Key==VirtualKey.Enter){await CopyAsync();e.Handled=true;}
         else if(ctrl&&e.Key==VirtualKey.S){await SaveAsync();e.Handled=true;}

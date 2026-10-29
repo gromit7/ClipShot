@@ -8,6 +8,9 @@ public sealed class UiText(string? language)
     public static string Russian(string text)=>EnglishText.FirstOrDefault(p=>p.Value==text).Key??text;
     private static readonly Dictionary<string,string> EnglishText=new(StringComparer.Ordinal)
     {
+        ["Вписать"]="Fit",
+        ["Исходный размер: один пиксель снимка — один пиксель экрана"]="Original size: one image pixel per screen pixel",
+        ["Редактор: стрелки, рамки, текст, мозаика, скрытие, отмена и повтор. «Копировать в буфер» сохраняет правку рядом с исходником и копирует результат. «Экспорт» — PNG или JPEG. «100%» показывает исходные пиксели; Ctrl + колесо меняет масштаб."]="Editor: arrows, rectangles, text, mosaic, redaction, undo and redo. Copy saves an edited copy beside the original and copies the result. Export: PNG or JPEG. 100% shows original pixels; Ctrl + wheel zooms.",
         ["Перетащить окно"]="Drag window",
         ["Изменённый снимок"]="Edited screenshot",
         ["Правки снимка сохраняются отдельной записью рядом с исходником; исходник не меняется. В буфер копируется изменённый вариант."]="Screenshot edits are saved as a separate entry beside the original, which remains unchanged. The edited version is copied to the clipboard.",

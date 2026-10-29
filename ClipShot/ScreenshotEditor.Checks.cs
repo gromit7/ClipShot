@@ -9,7 +9,20 @@ internal sealed partial class ScreenshotEditor
         if(!TestEnvironment.IsIsolated(Environment.GetCommandLineArgs()))throw new InvalidOperationException("Isolated test only.");
         var report=new List<string>();void Check(bool ok,string name){report.Add($"{(ok?"PASS":"FAIL")} {name}");}
         byte[] original=source.Pixels.ToArray();
+        SetImageZoom(false);await Task.Delay(150);
+        Check(Math.Abs(displayScale*viewport.ZoomFactor*root.XamlRoot.RasterizationScale-1)<.01,"100% displays one source pixel per physical screen pixel");
+        foreach(double scale in new[]{1,1.25,1.5,2})
+        {AdjustRasterScale(scale);Check(Math.Abs(displayScale*viewport.ZoomFactor*scale-1)<.01,$"100% preserves physical pixel scale under simulated DPI {scale}");}
+        AdjustRasterScale(root.XamlRoot.RasterizationScale);
+        SetImageZoom(true);await Task.Delay(150);Check(fitImage,"manual zoom regression starts in fit mode");
+        viewport.ChangeView(0,0,2,true);await Task.Delay(150);
+        Check(!fitImage&&Math.Abs(viewport.ZoomFactor-2)<.01,"manual zoom disables automatic fit");
+        double zoomBeforeResize=displayScale*viewport.ZoomFactor;viewport.Width=Math.Max(200,viewport.ActualWidth-50);await Task.Delay(150);
+        Check(Math.Abs(displayScale*viewport.ZoomFactor-zoomBeforeResize)<.01,"resizing preserves manual zoom");viewport.Width=double.NaN;
+        SetImageZoom(true);await Task.Delay(150);
+        Check(displayScale*viewport.ZoomFactor*source.Width<=viewport.ActualWidth+1&&displayScale*viewport.ZoomFactor*source.Height<=viewport.ActualHeight+1,$"fit view shows the whole screenshot without affecting source dimensions (scale={displayScale:F5}, zoom={viewport.ZoomFactor:F3}, viewport={viewport.ActualWidth:F0}x{viewport.ActualHeight:F0})");
         Check(tool==MarkTool.Arrow,"arrow is selected by default");
+        Check(toolbar.IsOpen&&toolbar.IsSticky,"command labels stay visible without a light-dismiss click shield");
         Check(copy.Label==T("Копировать в буфер")&&toolbar.PrimaryCommands.Count==9&&toolbar.SecondaryCommands.Count==0,"all nine commands are on one row and copy explicitly names clipboard");
         start=new(20,30);end=new(150,30.5);dragging=dirty=true;await Task.Delay(180);
         var commandBounds=toolbar.PrimaryCommands.OfType<Microsoft.UI.Xaml.FrameworkElement>().Select(b=>new {Y=b.TransformToVisual(root).TransformPoint(new Windows.Foundation.Point()).Y,Width=b.ActualWidth}).ToArray();
@@ -26,7 +39,9 @@ internal sealed partial class ScreenshotEditor
         var decoder=await BitmapDecoder.CreateAsync(stream);Check(decoder.PixelWidth==source.Width&&decoder.PixelHeight==source.Height,"export preserves original pixel dimensions");
         var decoded=await decoder.GetPixelDataAsync(BitmapPixelFormat.Bgra8,BitmapAlphaMode.Straight,new BitmapTransform(),ExifOrientationMode.IgnoreExifOrientation,ColorManagementMode.DoNotColorManage);
         var expected=AnnotationRenderer.Render(source,history.Marks);
-        Check(decoded.DetachPixelData().SequenceEqual(expected.Pixels),"exported PNG contains exact annotated pixels");
+        var exportedPixels=decoded.DetachPixelData();
+        Check(exportedPixels.SequenceEqual(expected.Pixels),"exported PNG contains exact annotated pixels");
+        Check(exportedPixels.Skip(source.Width*160*4).SequenceEqual(original.Skip(source.Width*160*4)),"one-pixel detail outside annotations survives editor and PNG export exactly");
         var jpeg=await ExportAsync(true);using var jpegStream=new InMemoryRandomAccessStream();using(var writer=new DataWriter(jpegStream.GetOutputStreamAt(0))){writer.WriteBytes(jpeg);await writer.StoreAsync();}jpegStream.Seek(0);
         var jpegDecoder=await BitmapDecoder.CreateAsync(jpegStream);
         Check(jpeg[0]==255&&jpeg[1]==216&&jpegDecoder.PixelWidth==source.Width&&jpegDecoder.PixelHeight==source.Height,"JPEG export uses a real JPEG encoder and preserves dimensions");
