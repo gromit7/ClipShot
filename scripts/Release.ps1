@@ -91,4 +91,5 @@ Confirm-Packages $latest $setups
 & (Join-Path $PSScriptRoot 'Publish-Mirror.ps1') -Version $version
 & (Join-Path $PSScriptRoot 'Publish-UpdateFeed.ps1') -ExpectedVersion $version -Publish -PrivateRepository:$privateRepository
 & (Join-Path $PSScriptRoot 'Publish-Installer.ps1') -Setup $setup
+& (Join-Path $PSScriptRoot 'Publish-Catalog.ps1') -Version $version -Setup $universal
 Write-Output "Выпущен ClipShot ${version}: единый ClipShot-$version.exe для Windows 10/11 опубликован на GitHub, зеркале и D; совместимые имена сохранены для старых обновляторов."

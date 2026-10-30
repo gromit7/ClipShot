@@ -24,6 +24,7 @@ function Process-Checked([string]$File,[string]$Arguments,[int]$Timeout=45000,[i
 $oldTestRoot=$env:CLIPSHOT_TEST_ROOT
 try{
     Step 'Test workspace cleanup and parallel isolation' {& (Join-Path $PSScriptRoot 'Test-TestWorkspace.ps1')}
+    Step 'Catalog post-release boundary' {& (Join-Path $PSScriptRoot 'Test-CatalogPublication.ps1')}
     if(-not $SkipBuild){Step 'Build, unit tests and publish' {& (Join-Path $PSScriptRoot 'Build.ps1') -Test -Publish}}
     $publication=Join-Path $repo 'ClipShot-app'
     $app=Join-Path $publication 'ClipShot.exe'
