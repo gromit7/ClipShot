@@ -1,6 +1,8 @@
 # Разработка ClipShot на другом компьютере
 
-Windows 11 x64, Git, PowerShell 7 и .NET SDK 10.
+Целевые системы приложения: Windows 10 x64 от 1809/LTSC 2019 и Windows 11 x64. Для подготовки рабочего места разработки нужны Git, PowerShell 7 и .NET SDK 10; ограничения фактической проверки ОС — [WINDOWS-PACKAGES.md](WINDOWS-PACKAGES.md).
+
+При продолжении сначала читать [STATUS.md](STATUS.md), затем [CHAT-CONTEXT.md](CHAT-CONTEXT.md) для решений из чатов и [FEATURE-QUEUE.md](FEATURE-QUEUE.md) для актуальной очереди. Git синхронизирует исходники, а не пользовательскую историю буфера.
 
 ```powershell
 git clone https://github.com/gromit7/ClipShot.git
