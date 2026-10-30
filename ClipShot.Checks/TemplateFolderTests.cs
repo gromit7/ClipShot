@@ -6,7 +6,8 @@ namespace ClipShot.Checks;
 
 public sealed class TemplateFolderTests : IDisposable
 {
-    private readonly string folder = Path.Combine(Path.GetTempPath(), "ClipShot-template-fixture-" + Guid.NewGuid().ToString("N"));
+    private readonly Testing.TestWorkspace workspace = new();
+    private string folder => workspace.Root;
     private string Database => Path.Combine(folder, "synthetic.db");
     private Store Open() => new(Database);
     private static string C(long id) => "c:" + id;
@@ -150,5 +151,5 @@ public sealed class TemplateFolderTests : IDisposable
         Assert.Equal($"{a},{b}", store.Get("templateorder", "")); Assert.Equal(2, store.All().Count);
     }
 
-    public void Dispose() { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
+    public void Dispose() => workspace.Dispose();
 }

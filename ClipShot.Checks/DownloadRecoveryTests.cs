@@ -3,7 +3,7 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using Xunit;
 namespace ClipShot;
-public class DownloadRecoveryTests
+public class DownloadRecoveryTests : TempWorkspaceOwner
 {
     private sealed class BrokenStream(byte[] bytes,bool stall,TaskCompletionSource? waiting=null):MemoryStream(bytes)
     {
@@ -32,7 +32,7 @@ public class DownloadRecoveryTests
     public async Task InterruptedDownloadResumesOrRestartsWhenServerIgnoresRange(bool ignoreRange,bool stall)
     {
         byte[] bytes=new byte[2048];Random.Shared.NextBytes(bytes);var network=new Network(bytes,ignoreRange,stall);
-        string root=Path.Combine(Path.GetTempPath(),"ClipShot.Tests",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);string path=Path.Combine(root,"setup.exe");
+        string root=NewTempRoot();Directory.CreateDirectory(root);string path=Path.Combine(root,"setup.exe");
         var update=new AppUpdate(new(9,0,0),new("https://github.com/gromit7/ClipShot/releases/download/v9.0.0/ClipShot-Setup-9.0.0.exe"),bytes.Length,Convert.ToHexString(SHA256.HashData(bytes)));
         using var client=new GitHubUpdates(network,[]){DownloadStallTimeout=TimeSpan.FromMilliseconds(100),DownloadRetryDelay=TimeSpan.Zero};
         await client.DownloadAsync(update,path,new Progress<int>(),CancellationToken.None);
@@ -41,7 +41,7 @@ public class DownloadRecoveryTests
     [Fact]public async Task CallerCancellationStopsDownloadWithoutRetryOrPartialInstaller()
     {
         byte[] bytes=new byte[2048];var network=new Network(bytes,stall:true);
-        string root=Path.Combine(Path.GetTempPath(),"ClipShot.Tests",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);string path=Path.Combine(root,"setup.exe");
+        string root=NewTempRoot();Directory.CreateDirectory(root);string path=Path.Combine(root,"setup.exe");
         var update=new AppUpdate(new(9,0,0),new("https://github.com/gromit7/ClipShot/releases/download/v9.0.0/ClipShot-Setup-9.0.0.exe"),bytes.Length,Convert.ToHexString(SHA256.HashData(bytes)));
         using var stop=CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);var retries=new List<int>();
         using var client=new GitHubUpdates(network,[]){DownloadRetryDelay=TimeSpan.Zero};
@@ -53,17 +53,17 @@ public class DownloadRecoveryTests
             await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>downloading);
             Assert.Single(network.Offsets);Assert.Empty(retries);Assert.False(File.Exists(path));Assert.False(File.Exists(path+".partial"));
         }
-        finally{stop.Cancel();Directory.Delete(root,true);}
+        finally{stop.Cancel();DeleteTempRoot(root);}
     }
     [Fact]public async Task IncorrectRangeNeverPublishesInstaller()
     {
-        byte[] bytes=new byte[2048];var network=new Network(bytes,wrongRange:true);string root=Path.Combine(Path.GetTempPath(),"ClipShot.Tests",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);string path=Path.Combine(root,"setup.exe");
+        byte[] bytes=new byte[2048];var network=new Network(bytes,wrongRange:true);string root=NewTempRoot();Directory.CreateDirectory(root);string path=Path.Combine(root,"setup.exe");
         var update=new AppUpdate(new(9,0,0),new("https://github.com/gromit7/ClipShot/releases/download/v9.0.0/ClipShot-Setup-9.0.0.exe"),bytes.Length,Convert.ToHexString(SHA256.HashData(bytes)));
         using var client=new GitHubUpdates(network,[]){DownloadRetryDelay=TimeSpan.Zero};await Assert.ThrowsAsync<InvalidDataException>(()=>client.DownloadAsync(update,path,new Progress<int>(),CancellationToken.None));Assert.False(File.Exists(path));Assert.False(File.Exists(path+".partial"));
     }
     [Fact]public async Task RepeatedNetworkFailureStopsAfterThreeAttempts()
     {
-        byte[] bytes=new byte[2048];var network=new Network(bytes,alwaysFail:true);string root=Path.Combine(Path.GetTempPath(),"ClipShot.Tests",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);string path=Path.Combine(root,"setup.exe");
+        byte[] bytes=new byte[2048];var network=new Network(bytes,alwaysFail:true);string root=NewTempRoot();Directory.CreateDirectory(root);string path=Path.Combine(root,"setup.exe");
         var update=new AppUpdate(new(9,0,0),new("https://github.com/gromit7/ClipShot/releases/download/v9.0.0/ClipShot-Setup-9.0.0.exe"),bytes.Length,new string('a',64));
         using var client=new GitHubUpdates(network,[]){DownloadRetryDelay=TimeSpan.Zero};await Assert.ThrowsAsync<IOException>(()=>client.DownloadAsync(update,path,new Progress<int>(),CancellationToken.None));Assert.Equal(3,network.Offsets.Count);Assert.False(File.Exists(path));
     }

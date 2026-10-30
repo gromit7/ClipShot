@@ -4,7 +4,7 @@ using System.Text.Json;
 using Xunit;
 namespace ClipShot;
 
-public class UnitPlatformPackagesTests
+public class UnitPlatformPackagesTests : TempWorkspaceOwner
 {
     private static readonly Version Current=new(0,7,3),Next=new(0,7,4);
     private static string Release(string flavor="legacy",string version="0.7.4",string? name=null,string? url=null,string? digest=null)=>JsonSerializer.Serialize(new
@@ -87,7 +87,7 @@ public class UnitPlatformPackagesTests
     }
     [Fact]public void PendingPackageKeepsFlavorAndRefusesWrongWindowsAfterRestart()
     {
-        string root=Path.Combine(Path.GetTempPath(),"ClipShot.Tests",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
+        string root=NewTempRoot();Directory.CreateDirectory(root);
         try
         {
             var update=UpdateProtocol.Parse(Release("win10"),Current,flavor:"win10")!;byte[] bytes=new byte[2048];Random.Shared.NextBytes(bytes);
@@ -97,7 +97,7 @@ public class UnitPlatformPackagesTests
             Assert.Throws<InvalidDataException>(()=>PendingUpdate.Read(json,root,Current,22000));
             Assert.Throws<InvalidDataException>(()=>PendingUpdate.Read(JsonSerializer.Serialize(new PendingPackage(file,update with{PackageName="ClipShot-Win11-Setup-0.7.4.exe"})),root,Current,22000));
         }
-        finally{Directory.Delete(root,true);}
+        finally{DeleteTempRoot(root);}
     }
     private sealed class OneFeedHandler(string json):HttpMessageHandler
     {

@@ -175,11 +175,12 @@ public sealed class ClipdiaryImportTests
 
     private sealed class DatabaseFixture : IDisposable
     {
-        public string Directory { get; } = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ClipShot-import-test-" + Guid.NewGuid());
+        private readonly Testing.TestWorkspace workspace = new();
+        public string Directory => System.IO.Path.Combine(workspace.Root, "Data");
         public string Path => System.IO.Path.Combine(Directory, "fixture.db");
         public DatabaseFixture() => System.IO.Directory.CreateDirectory(Directory);
         public SqliteConnection Open()
         { var db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = Path, Pooling = false }.ToString()); db.Open(); return db; }
-        public void Dispose() => System.IO.Directory.Delete(Directory, true);
+        public void Dispose() => workspace.Dispose();
     }
 }

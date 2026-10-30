@@ -1,5 +1,11 @@
-param([string]$MakeNsis,[switch]$SkipBuild,[switch]$SkipDesktop,[switch]$PublishInstaller)
+﻿param([string]$MakeNsis,[switch]$SkipBuild,[switch]$SkipDesktop,[switch]$PublishInstaller)
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'TestWorkspace.ps1')
+$fixtureScope=New-ClipShotTestScope
+$fixtureGate=$null
+try {
+    $fixtureGate=Enter-ClipShotTestGate
+
 $repo=Split-Path $PSScriptRoot
 $reports=Join-Path $repo 'TestResults'
 New-Item -ItemType Directory -Force -Path $reports | Out-Null
@@ -11,11 +17,13 @@ function Step([string]$Name,[scriptblock]$Action){
 }
 function Process-Checked([string]$File,[string]$Arguments,[int]$Timeout=45000,[int]$ExpectedExit=0){
     $process=Start-Process -FilePath $File -ArgumentList $Arguments -PassThru -WindowStyle Hidden
+    Register-ClipShotTestProcess $fixtureScope $process
     if(-not $process.WaitForExit($Timeout)){$process.Kill();throw "Test process timed out: $Arguments"}
     $process.Refresh();if($process.ExitCode -ne $ExpectedExit){throw "Test process exited $($process.ExitCode), expected ${ExpectedExit}: $Arguments"}
 }
 $oldTestRoot=$env:CLIPSHOT_TEST_ROOT
 try{
+    Step 'Test workspace cleanup and parallel isolation' {& (Join-Path $PSScriptRoot 'Test-TestWorkspace.ps1')}
     if(-not $SkipBuild){Step 'Build, unit tests and publish' {& (Join-Path $PSScriptRoot 'Build.ps1') -Test -Publish}}
     $publication=Join-Path $repo 'ClipShot-app'
     $app=Join-Path $publication 'ClipShot.exe'
@@ -43,7 +51,7 @@ try{
             @{Name='Screenshot editor, arrows and export';Args='--editor-self-test';Report='editor-checks.txt'}
         )){
             Step $case.Name {
-                $env:CLIPSHOT_TEST_ROOT=Join-Path ([IO.Path]::GetTempPath()) ('ClipShot.Tests/'+[guid]::NewGuid().ToString('N'))
+                $env:CLIPSHOT_TEST_ROOT=New-ClipShotTestRoot $fixtureScope
                 Process-Checked $app $case.Args
                 $report=Join-Path $env:CLIPSHOT_TEST_ROOT $case.Report
                 if(-not(Test-Path -LiteralPath $report)){throw 'Test report was not produced'}
@@ -82,7 +90,7 @@ try{
         Step 'Installer OS compatibility matrix' {
             $lines=@(foreach($wrapper in $wrappers){
                 foreach($build in 17762,17763,19041,21999,22000,26100){
-                    $guardRoot=Join-Path ([IO.Path]::GetTempPath()) ('ClipShot.Tests/'+[guid]::NewGuid().ToString('N'))
+                    $guardRoot=New-ClipShotTestRoot $fixtureScope
                     New-Item -ItemType Directory -Path $guardRoot -Force | Out-Null
                     $allowed=[int]($build -ge $wrapper.Min -and $build -le $wrapper.Max)
                     $exit=if($allowed){0}else{2}
@@ -96,7 +104,7 @@ try{
             $lines | Set-Content -LiteralPath (Join-Path $reports 'installer-os-checks.txt') -Encoding utf8
         }
         foreach($wrapper in $wrappers){Step ('Compiled installer Russian strings '+$wrapper.Flavor) {
-            $languageRoot=Join-Path ([IO.Path]::GetTempPath()) ('ClipShot.Tests/'+[guid]::NewGuid().ToString('N'))
+            $languageRoot=New-ClipShotTestRoot $fixtureScope
             New-Item -ItemType Directory -Path $languageRoot -Force | Out-Null
             Process-Checked $wrapper.Path ('/S /LANGCHECK /TESTROOT="'+$languageRoot+'"')
             $language=Get-Content -LiteralPath (Join-Path $languageRoot 'installer-language.txt') -Raw -Encoding unicode
@@ -110,7 +118,7 @@ try{
                 $os=[Environment]::OSVersion.Version
                 if($os.Build -lt 22000){throw 'Полная проверка Win11-пакета требует Windows 11.'}
                 $win11=$wrappers | Where-Object Flavor -eq 'win11'
-                $variantRoot=Join-Path ([IO.Path]::GetTempPath()) ('ClipShot.Tests/'+[guid]::NewGuid().ToString('N'))
+                $variantRoot=New-ClipShotTestRoot $fixtureScope
                 New-Item -ItemType Directory -Path $variantRoot -Force | Out-Null
                 $variantArgs='/S /TESTROOT="'+$variantRoot+'"'
                 Process-Checked $win11.Path $variantArgs 120000
@@ -150,7 +158,7 @@ try{
                 & (Join-Path $PSScriptRoot 'Test-LegacyUpdaterBridge.ps1') -Setup $migrationSetup -Publication $publication -NestedActualApp
             }
             Step 'Transactional install, locked DLL and verification rollback' {
-                $transactionRoot=Join-Path ([IO.Path]::GetTempPath()) ('ClipShot.Tests/'+[guid]::NewGuid().ToString('N'))
+                $transactionRoot=New-ClipShotTestRoot $fixtureScope
                 New-Item -ItemType Directory -Path $transactionRoot -Force | Out-Null
                 $transactionDir=Join-Path $transactionRoot 'App'
                 $transactionArgs='/S /TESTROOT="'+$transactionRoot+'"'
@@ -204,7 +212,7 @@ try{
                 Set-Content -LiteralPath (Join-Path $reports 'installation-integrity-checks.txt') -Value ("PASS locked DLL leaves one complete version (exit $lockedResult), unrelated nested file preserved, invalid manifest restores all original files")
             }
             Step 'Isolated install, running-app upgrade and uninstall' {
-                $sandbox=Join-Path ([IO.Path]::GetTempPath()) ('ClipShot.Tests/'+[guid]::NewGuid().ToString('N'))
+                $sandbox=New-ClipShotTestRoot $fixtureScope
                 New-Item -ItemType Directory -Path $sandbox -Force | Out-Null
                 $env:CLIPSHOT_TEST_ROOT=Join-Path $sandbox 'Data'
                 $installDir=Join-Path $sandbox 'App'
@@ -294,4 +302,9 @@ try{
 }finally{
     $env:CLIPSHOT_TEST_ROOT=$oldTestRoot
     $results | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $reports 'release-checks.json') -Encoding utf8
+}
+
+} finally {
+    try { Complete-ClipShotTestScope $fixtureScope }
+    finally { if($fixtureGate){$fixtureGate.ReleaseMutex();$fixtureGate.Dispose()} }
 }

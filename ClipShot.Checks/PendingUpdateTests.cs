@@ -2,11 +2,11 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Xunit;
 namespace ClipShot;
-public class PendingUpdateTests
+public class PendingUpdateTests : TempWorkspaceOwner
 {
-    private static (string Root,string File,AppUpdate Update) Package(string version="0.7.9",bool rollback=false)
+    private (string Root,string File,AppUpdate Update) Package(string version="0.7.9",bool rollback=false)
     {
-        string root=Path.Combine(Path.GetTempPath(),"ClipShot.Tests",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
+        string root=NewTempRoot();Directory.CreateDirectory(root);
         string file=Path.Combine(root,$"ClipShot-Setup-{version}.exe");byte[] bytes=new byte[2048];Random.Shared.NextBytes(bytes);File.WriteAllBytes(file,bytes);
         return(root,file,new(Version.Parse(version),new($"https://github.com/gromit7/ClipShot/releases/download/v{version}/ClipShot-Setup-{version}.exe"),bytes.Length,Convert.ToHexString(SHA256.HashData(bytes)),rollback));
     }

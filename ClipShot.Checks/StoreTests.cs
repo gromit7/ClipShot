@@ -5,10 +5,11 @@ using Xunit;
 namespace ClipShot.Checks;
 public sealed class StoreTests : IDisposable
 {
-    private readonly string folder=Path.Combine(Path.GetTempPath(),"ClipShot.Tests",Guid.NewGuid().ToString("N"));
+    private readonly Testing.TestWorkspace workspace = new();
+    private string folder => workspace.Root;
     private string Database=>Path.Combine(folder,"test;name.db");
     private Store Open()=>new(Database);
-    public void Dispose(){if(Directory.Exists(folder))Directory.Delete(folder,true);}
+    public void Dispose() => workspace.Dispose();
     private void Age(string text,int days)
     {
         using var db=new SqliteConnection(new SqliteConnectionStringBuilder{DataSource=Database,Pooling=false}.ToString());db.Open();

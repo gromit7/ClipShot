@@ -3,7 +3,7 @@ using System.Text.Json;
 using System.Security.Cryptography;
 using Xunit;
 namespace ClipShot;
-public class UpdateTests
+public class UpdateTests : TempWorkspaceOwner
 {
     private static string Policy(string target="0.7.0",string action="rollback",string affected="0.8.0")=>JsonSerializer.Serialize(new{schema=1,channel="stable",action,affectedVersions=new[]{affected},targetVersion=target,reason="Исправление ошибки"});
     [Fact]public void ExplicitPolicyAllowsOnlyAffectedVersion()=>Assert.Equal(new Version(0,7,0),RollbackPolicy.Parse(Policy(),new Version(0,8,0))!.Target);
@@ -164,14 +164,14 @@ public class UpdateTests
     }
     [Fact]public async Task DownloadVerifiesHashBeforePublishingInstaller()
     {
-        byte[] data=Enumerable.Range(0,2048).Select(i=>(byte)i).ToArray();string folder=Path.Combine(Path.GetTempPath(),"ClipShot.Tests",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);string path=Path.Combine(folder,"setup.exe");
+        byte[] data=Enumerable.Range(0,2048).Select(i=>(byte)i).ToArray();string folder=NewTempRoot();Directory.CreateDirectory(folder);string path=Path.Combine(folder,"setup.exe");
         var update=new AppUpdate(new(9,0,0),new("https://github.com/gromit7/ClipShot/releases/download/v9.0.0/ClipShot-Setup-9.0.0.exe"),data.Length,Convert.ToHexString(SHA256.HashData(data)));
         using var client=new GitHubUpdates(new Handler(data),[]){DownloadRetryDelay=TimeSpan.Zero};await client.DownloadAsync(update,path,new Progress<int>(),CancellationToken.None);Assert.True(UpdateProtocol.Verify(path,update));Assert.False(File.Exists(path+".partial"));
         data[0]^=1;File.WriteAllBytes(path,data);Assert.False(UpdateProtocol.Verify(path,update));
     }
     [Fact]public async Task CorruptedDownloadIsRemovedAndNeverBecomesInstaller()
     {
-        byte[] data=new byte[2048];string folder=Path.Combine(Path.GetTempPath(),"ClipShot.Tests",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);string path=Path.Combine(folder,"setup.exe");
+        byte[] data=new byte[2048];string folder=NewTempRoot();Directory.CreateDirectory(folder);string path=Path.Combine(folder,"setup.exe");
         var update=new AppUpdate(new(9,0,0),new("https://github.com/gromit7/ClipShot/releases/download/v9.0.0/ClipShot-Setup-9.0.0.exe"),data.Length,new string('a',64));
         using var client=new GitHubUpdates(new Handler(data),[]){DownloadRetryDelay=TimeSpan.Zero};await Assert.ThrowsAsync<InvalidDataException>(()=>client.DownloadAsync(update,path,new Progress<int>(),CancellationToken.None));Assert.False(File.Exists(path));Assert.False(File.Exists(path+".partial"));
     }

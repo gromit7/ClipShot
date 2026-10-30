@@ -6,6 +6,12 @@ param(
     [switch]$CheckOnly
 )
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'TestWorkspace.ps1')
+$fixtureScope=New-ClipShotTestScope
+$fixtureGate=$null
+try {
+    $fixtureGate=Enter-ClipShotTestGate
+
 $repo=Split-Path $PSScriptRoot
 
 function Get-RuntimePlatform {
@@ -49,17 +55,7 @@ function Assert-NoReparsePoint([string]$Path){
     $item=Get-Item -LiteralPath $Path -Force
     if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0){throw 'unsafe-test-directory'}
 }
-function New-RuntimeDataDirectory {
-    $base=[IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) 'ClipShot.Tests'))
-    if(-not(Test-Path -LiteralPath $base)){New-Item -ItemType Directory -Path $base -Force|Out-Null}
-    Assert-NoReparsePoint $base
-    $path=Join-Path $base ([guid]::NewGuid().ToString('N'))
-    if(Test-Path -LiteralPath $path){throw 'unsafe-test-directory'}
-    New-Item -ItemType Directory -Path $path|Out-Null
-    Assert-NoReparsePoint $path
-    if([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($path)) -cne $base){throw 'unsafe-test-directory'}
-    return $path
-}
+function New-RuntimeDataDirectory { return (New-ClipShotTestRoot $fixtureScope) }
 function Get-VerifiedPublication([string]$Path){
     $root=[IO.Path]::GetFullPath($Path).TrimEnd([IO.Path]::DirectorySeparatorChar,[IO.Path]::AltDirectorySeparatorChar)
     if(-not(Test-Path -LiteralPath $root -PathType Container)){throw 'missing-publication'}
@@ -127,6 +123,7 @@ function Invoke-RuntimeCase($Publication,$Case,[int]$Timeout){
         $start.EnvironmentVariables['CLIPSHOT_TEST_ROOT']=$directory
         $process=New-Object Diagnostics.Process;$process.StartInfo=$start
         if(-not $process.Start()){throw 'test-process-start-failed'}
+        Register-ClipShotTestProcess $fixtureScope $process
         if(-not $process.WaitForExit($Timeout*1000)){throw 'test-process-timeout'}
         $result.exitCode=$process.ExitCode
         if($process.ExitCode -ne 0){throw 'test-process-exit-code'}
@@ -193,3 +190,8 @@ finally{
     Write-Output 'Отчёты: runtime-checks.json и runtime-checks.txt в каталоге результатов.'
 }
 if($exitCode -ne 0){throw 'Проверка не пройдена. Причина указана обезличенным кодом в runtime-checks.json.'}
+
+} finally {
+    try { Complete-ClipShotTestScope $fixtureScope }
+    finally { if($fixtureGate){$fixtureGate.ReleaseMutex();$fixtureGate.Dispose()} }
+}

@@ -1,19 +1,26 @@
-param(
+﻿param(
     [Parameter(Mandatory=$true)][string]$Setup,
     [string]$OldSetup=(Join-Path (Split-Path $PSScriptRoot) 'ClipShot-Setup-0.7.4.exe'),
     [string]$Publication=(Join-Path (Split-Path $PSScriptRoot) 'ClipShot-app'),
     [switch]$NestedActualApp
 )
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'TestWorkspace.ps1')
+$fixtureScope=New-ClipShotTestScope
+$fixtureGate=$null
+try {
+    $fixtureGate=Enter-ClipShotTestGate
+
 $oldHash='e9f1be64b9e3dcb01768b8b51261ae1d2a2d59e5ef16c8969cea16fecb95ff74'
 if(-not(Test-Path -LiteralPath $OldSetup) -or (Get-FileHash -LiteralPath $OldSetup).Hash.ToLowerInvariant() -ne $oldHash){throw 'A verified official 0.7.4 legacy installer is required for the migration regression.'}
-$root=Join-Path ([IO.Path]::GetTempPath()) ('ClipShot.Tests/'+[guid]::NewGuid().ToString('N'))
+$root=New-ClipShotTestRoot $fixtureScope
 $appDir=Join-Path $root 'App';$app=Join-Path $appDir 'ClipShot.exe'
 $updates=Join-Path $root 'Updates';$data=Join-Path $root 'Data'
 New-Item -ItemType Directory -Path $root,$updates -Force | Out-Null
 $saved=$env:CLIPSHOT_TEST_ROOT
 function Run([string]$File,[string]$Arguments,[string]$Cwd,[int]$Expected=0){
     $process=Start-Process -FilePath $File -ArgumentList $Arguments -WorkingDirectory $Cwd -PassThru -WindowStyle Hidden
+    Register-ClipShotTestProcess $fixtureScope $process
     if(-not $process.WaitForExit(180000)){$process.Kill();throw 'Isolated migration process timed out'}
     if($process.ExitCode -ne $Expected){throw ('Unexpected isolated migration exit: '+$process.ExitCode+' expected '+$Expected)}
 }
@@ -87,3 +94,8 @@ try{
     Set-Content -LiteralPath (Join-Path (Split-Path $PSScriptRoot) 'TestResults/legacy-updater-bridge-checks.txt') -Value $report
     $report
 }finally{try{Stop-TestApp}finally{$env:CLIPSHOT_TEST_ROOT=$saved}}
+
+} finally {
+    try { Complete-ClipShotTestScope $fixtureScope }
+    finally { if($fixtureGate){$fixtureGate.ReleaseMutex();$fixtureGate.Dispose()} }
+}

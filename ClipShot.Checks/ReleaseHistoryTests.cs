@@ -2,7 +2,7 @@ using System.Text.Json;
 using Xunit;
 namespace ClipShot;
 
-public class ReleaseHistoryTests
+public class ReleaseHistoryTests : TempWorkspaceOwner
 {
     private static string Document(params string[] versions)=>JsonSerializer.Serialize(new{schema=1,releases=versions.Select(version=>new{version,changes=new[]{"Изменение интерфейса","Улучшена установка","Сохранены настройки"}})});
     [Fact]public void CurrentAndFourPreviousReleasesAreShownNewestFirst()
@@ -24,14 +24,14 @@ public class ReleaseHistoryTests
     }
     [Fact]public void MissingOrDamagedFileUsesTheQuietFallback()
     {
-        string root=Path.Combine(Path.GetTempPath(),"ClipShot.Tests",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);string file=Path.Combine(root,"history.json");
+        string root=NewTempRoot();Directory.CreateDirectory(root);string file=Path.Combine(root,"history.json");
         try
         {
             Assert.Empty(ReleaseHistory.Load(file,new(0,7,6)));
             File.WriteAllText(file,"not json");Assert.Empty(ReleaseHistory.Load(file,new(0,7,6)));
             File.WriteAllText(file,Document("0.7.6"));Assert.Single(ReleaseHistory.Load(file,new(0,7,6)));
         }
-        finally{File.Delete(file);Directory.Delete(root);}
+        finally{File.Delete(file);DeleteTempRoot(root);}
     }
     [Theory][InlineData(1080,1)][InlineData(768,1)][InlineData(1024,2)][InlineData(180,2)]
     public void NoticeFitsTheWorkAreaAtDifferentDpi(int height,double scale)

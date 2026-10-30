@@ -1,8 +1,12 @@
-# Offline receipt checks. The temporary executor never runs its Command.
+﻿# Offline receipt checks. The temporary executor never runs its Command.
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'TestWorkspace.ps1')
+$fixtureScope=New-ClipShotTestScope
+try {
+
 $publisher=Join-Path $PSScriptRoot 'Publish-OriginFeed.ps1'
 $base=[IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) 'ClipShot.Tests'))
-$fixture=Join-Path $base ('origin-feed-'+[guid]::NewGuid().ToString('N'))
+$fixture=New-ClipShotTestRoot $fixtureScope
 New-Item -ItemType Directory -Path $fixture -Force|Out-Null
 $executor=Join-Path $fixture 'executor.ps1';$feedPath=Join-Path $fixture 'feed.json';$control=Join-Path $fixture 'mode.txt'
 $oldExit=$global:LASTEXITCODE
@@ -70,7 +74,5 @@ try{
  Write-Output ("PASS $count origin wrapper checks; no network or SSH; PowerShell "+$PSVersionTable.PSVersion)
 }finally{
  $global:LASTEXITCODE=$oldExit
- $resolved=[IO.Path]::GetFullPath($fixture)
- if([IO.Path]::GetDirectoryName($resolved) -cne $base -or -not([IO.Path]::GetFileName($resolved)).StartsWith('origin-feed-')){throw 'Unsafe fixture cleanup'}
- Remove-Item -LiteralPath $resolved -Recurse -Force
 }
+} finally { Complete-ClipShotTestScope $fixtureScope }

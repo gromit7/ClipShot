@@ -5,7 +5,7 @@ using System.Security.Cryptography;
 using Xunit;
 namespace ClipShot;
 
-public class UpdateMirrorFallbackTests
+public class UpdateMirrorFallbackTests : TempWorkspaceOwner
 {
     private sealed class Network(byte[] bytes,string mirrorError,bool bothCorrupt=false):HttpMessageHandler
     {
@@ -40,7 +40,7 @@ public class UpdateMirrorFallbackTests
     public async Task CorruptFastOriginFallsBackToVerifiedRelayWithoutBadPrefix(string error)
     {
         byte[] bytes=new byte[131072];Random.Shared.NextBytes(bytes);var network=new Network(bytes,error);
-        string root=Path.Combine(Path.GetTempPath(),"ClipShot.Tests",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);string path=Path.Combine(root,"setup.exe");
+        string root=NewTempRoot();Directory.CreateDirectory(root);string path=Path.Combine(root,"setup.exe");
         var update=Update(bytes);var retries=new List<int>();
         using var client=new GitHubUpdates(network){DownloadRetryDelay=TimeSpan.Zero};
         await client.DownloadAsync(update,path,new Progress<int>(),CancellationToken.None,retries.Add);
@@ -50,7 +50,7 @@ public class UpdateMirrorFallbackTests
     [Fact]public async Task LegacyGithubIsTriedOnlyAfterBothVdsDownloadsFail()
     {
         byte[] bytes=new byte[131072];Random.Shared.NextBytes(bytes);var network=new Network(bytes,"checksum",bothCorrupt:true);
-        string root=Path.Combine(Path.GetTempPath(),"ClipShot.Tests",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);string path=Path.Combine(root,"setup.exe");
+        string root=NewTempRoot();Directory.CreateDirectory(root);string path=Path.Combine(root,"setup.exe");
         try
         {
             using var client=new GitHubUpdates(network){DownloadRetryDelay=TimeSpan.Zero};
@@ -58,6 +58,6 @@ public class UpdateMirrorFallbackTests
             Assert.Equal(new[]{("bot.data-clouds.ru",(long?)null),("tg.data-clouds.ru",(long?)null),("github.com",(long?)null)},network.Downloads.ToArray());
             Assert.Equal(2,network.Probes.Count);Assert.DoesNotContain("github.com",network.Probes);Assert.True(UpdateProtocol.Verify(path,Update(bytes)));Assert.False(File.Exists(path+".partial"));
         }
-        finally{Directory.Delete(root,true);}
+        finally{DeleteTempRoot(root);}
     }
 }

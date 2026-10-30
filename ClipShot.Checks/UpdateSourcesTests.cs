@@ -4,7 +4,7 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using Xunit;
 namespace ClipShot;
-public class UpdateSourcesTests
+public class UpdateSourcesTests : TempWorkspaceOwner
 {
     private sealed class Network(byte[] bytes,bool failMirror=false,bool ignoreRange=false):HttpMessageHandler
     {
@@ -33,14 +33,14 @@ public class UpdateSourcesTests
     [Fact]public async Task FailedRelayDoesNotPreventOriginDownload()
     {
         byte[] bytes=new byte[2048];var network=new Network(bytes,failMirror:true);using var client=new GitHubUpdates(network);
-        string root=Path.Combine(Path.GetTempPath(),"ClipShot.Tests",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);string path=Path.Combine(root,"setup.exe");
+        string root=NewTempRoot();Directory.CreateDirectory(root);string path=Path.Combine(root,"setup.exe");
         try
         {
             await client.DownloadAsync(Update(bytes),path,new Progress<int>(),TestContext.Current.CancellationToken);
             Assert.True(UpdateProtocol.Verify(path,Update(bytes)));Assert.Equal("bot.data-clouds.ru",Assert.Single(network.Requests,request=>!request.IsProbe).Host);
             Assert.DoesNotContain(network.Requests,request=>request.Host=="github.com");
         }
-        finally{Directory.Delete(root,true);}
+        finally{DeleteTempRoot(root);}
     }
     [Fact]public async Task SingleSourceDoesNotIssueExtraProbeRequest()
     {
@@ -52,7 +52,7 @@ public class UpdateSourcesTests
     public void InvalidMirrorRootIsRejected(string root)=>Assert.Throws<InvalidDataException>(()=>UpdateSources.Package(new(root),Update(new byte[2048])));
     [Fact]public async Task RankedMirrorIsUsedByDownloader()
     {
-        byte[] bytes=new byte[2048];string root=Path.Combine(Path.GetTempPath(),"ClipShot.Tests",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
+        byte[] bytes=new byte[2048];string root=NewTempRoot();Directory.CreateDirectory(root);
         var network=new Network(bytes);using var client=new GitHubUpdates(network);string path=Path.Combine(root,"setup.exe");
         await client.DownloadAsync(Update(bytes),path,new Progress<int>(),CancellationToken.None);Assert.True(UpdateProtocol.Verify(path,Update(bytes)));
         Assert.Equal("tg.data-clouds.ru",Assert.Single(network.Requests,request=>!request.IsProbe).Host);Assert.DoesNotContain(network.Requests,request=>request.Host=="github.com");

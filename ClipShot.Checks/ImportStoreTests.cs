@@ -6,7 +6,8 @@ namespace ClipShot.Checks;
 
 public sealed class ImportStoreTests : IDisposable
 {
-    private readonly string folder=Path.Combine(Path.GetTempPath(),"ClipShot.Tests","ImportStore-"+Guid.NewGuid().ToString("N"));
+    private readonly Testing.TestWorkspace workspace = new();
+    private string folder => workspace.Root;
     private string Database=>Path.Combine(folder,"synthetic.db");
     private Store Open()=>new(Database);
     private static DateTime Yesterday=>DateTime.Today.AddDays(-1).AddHours(23).AddMinutes(47);
@@ -109,5 +110,5 @@ public sealed class ImportStoreTests : IDisposable
         Assert.Throws<SqliteException>(()=>store.Import([Text(1,"new first"),Text(2,"blocked")],true,TestContext.Current.CancellationToken));
         Assert.Equal(original,Assert.Single(store.All()));Assert.Equal("90",store.Get("days",""));
     }
-    public void Dispose(){if(Directory.Exists(folder))Directory.Delete(folder,true);}
+    public void Dispose() => workspace.Dispose();
 }

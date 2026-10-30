@@ -1,8 +1,13 @@
-param([Parameter(Mandatory=$true)][string]$MakeNsis)
+﻿param([Parameter(Mandatory=$true)][string]$MakeNsis)
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'TestWorkspace.ps1')
+$fixtureScope=New-ClipShotTestScope
+$fixtureGate=$null
+try {
+
 $repo=Split-Path $PSScriptRoot
-$root=Join-Path ([IO.Path]::GetTempPath()) ('ClipShot.Tests/'+[guid]::NewGuid().ToString('N'))
-New-Item -ItemType Directory -Path $root | Out-Null
+$root=New-ClipShotTestRoot $fixtureScope
+New-Item -ItemType Directory -Path $root -Force | Out-Null
 $harness=Join-Path $root 'ShortcutHarness.nsi'
 $exe=Join-Path $root 'ShortcutHarness.exe'
 $include=Join-Path $repo 'ClipShot/DesktopShortcut.nsh'
@@ -44,8 +49,7 @@ function No-Link([string]$CaseRoot){
     if(Test-Path -LiteralPath (Join-Path $CaseRoot 'Desktop/ClipShot.lnk')){throw 'Deleted shortcut was restored'}
 }
 try{
-    $outside=$root+'-outside'
-    New-Item -ItemType Directory -Path $outside | Out-Null
+    $outside=New-ClipShotTestRoot $fixtureScope
     foreach($invalid in @('',('/ROOT="'+$outside+'"'))){
         $start=@{FilePath=$exe;PassThru=$true;WindowStyle='Hidden'}
         if($invalid){$start.ArgumentList=$invalid}
@@ -89,8 +93,13 @@ try{
         No-Link $repair
         $lines.Add('PASS registered installation repair preserves the missing shortcut')
     }finally{if(Test-Path -LiteralPath $key){Remove-Item -LiteralPath $key}}
-    $reports=Join-Path $repo 'TestResults'
+    $reports=Join-Path $repo ('TestResults/desktop-shortcut/'+$fixtureScope.Id)
     New-Item -ItemType Directory -Path $reports -Force | Out-Null
     $lines | Set-Content -LiteralPath (Join-Path $reports 'desktop-shortcut-checks.txt') -Encoding utf8
     $lines
 }finally{[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shell)}
+
+} finally {
+    try { Complete-ClipShotTestScope $fixtureScope }
+    finally { if($fixtureGate){$fixtureGate.ReleaseMutex();$fixtureGate.Dispose()} }
+}

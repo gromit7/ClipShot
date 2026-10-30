@@ -16,4 +16,4 @@
   <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" PrivateAssets="all"/>
   <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1"/>
  </ItemGroup>
-<ItemGroup><Compile Include="../ClipShot/UpdateStartupHealth.cs" Link="UpdateStartupHealth.cs"/></ItemGroup></Project>
+<ItemGroup><Compile Include="../ClipShot/UpdateStartupHealth.cs" Link="UpdateStartupHealth.cs"/></ItemGroup><ItemGroup><Compile Include="../scripts/TestWorkspace.cs" Link="TestWorkspace.cs"/></ItemGroup></Project>

@@ -4,10 +4,11 @@ namespace ClipShot.Checks;
 
 public sealed class StoreImageTests : IDisposable
 {
-    private readonly string folder=Path.Combine(Path.GetTempPath(),"ClipShot.Tests","StoreImage-"+Guid.NewGuid().ToString("N"));
+    private readonly Testing.TestWorkspace workspace = new();
+    private string folder => workspace.Root;
     private string Database=>Path.Combine(folder,"images.db");
     private Store Open()=>new(Database);
-    public void Dispose(){if(Directory.Exists(folder))Directory.Delete(folder,true);}
+    public void Dispose() => workspace.Dispose();
     private long Add(Store store,byte[] bytes){store.Add("image","",image:bytes);return store.All().Single(c=>c.Image is not null&&c.Image.SequenceEqual(bytes)).Id;}
     private static void Same(Clip before,Clip after){Assert.Equal(before with{Image=null},after with{Image=null});Assert.Equal(before.Image,after.Image);}
 

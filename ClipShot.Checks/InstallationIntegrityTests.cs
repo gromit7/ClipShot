@@ -2,11 +2,11 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Xunit;
 namespace ClipShot;
-public class InstallationIntegrityTests
+public class InstallationIntegrityTests : TempWorkspaceOwner
 {
-    private static string Fixture()
+    private string Fixture()
     {
-        string root=Path.Combine(Path.GetTempPath(),"ClipShot.Tests",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);
+        string root=NewTempRoot();Directory.CreateDirectory(root);
         var hashes=new Dictionary<string,string>();
         foreach(string name in new[]{"ClipShot.exe","ClipShot.dll","ClipShot.pri"}){byte[] bytes=System.Text.Encoding.UTF8.GetBytes("synthetic "+name);File.WriteAllBytes(Path.Combine(root,name),bytes);hashes[name]=Convert.ToHexString(SHA256.HashData(bytes));}
         File.WriteAllText(Path.Combine(root,"FileHashes.json"),JsonSerializer.Serialize(hashes));return root;
