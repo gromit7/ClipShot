@@ -13,7 +13,8 @@ public sealed partial class MainWindow
             fixture=AnnotationRenderer.Render(fixture,[new(MarkTool.Text,new(24,180),new(24,180),"Синтетический текст · 0123456789 · тонкие детали",Color:"#111111",Width:1)]);
             var fixturePng=await DesktopCapture.Png(fixture);store.Add("image","",image:fixturePng);
             var image=store.All().Single(c=>c.Image is not null&&c.Image.SequenceEqual(fixturePng));
-            var editing=EditImage(image);for(int attempt=0;attempt<30&&editor is null;attempt++)await Task.Delay(100);
+            // The real list now carries metadata; editing must fetch the original on demand.
+            var editing=EditImage(image with{Image=null});for(int attempt=0;attempt<30&&editor is null;attempt++)await Task.Delay(100);
             var testedEditor=editor??throw new InvalidOperationException("Editor did not open");var result=testedEditor.ShowAsync();
             if(interactive){await editing;if(!exiting)ShowNearCursor();return;}
             int initialCount=store.All().Count;uint sequence=Native.GetClipboardSequenceNumber();var checks=await testedEditor.CheckAsync(async()=>

@@ -210,6 +210,14 @@ public sealed partial class MainWindow
             foreach(var state in Enum.GetValues<MicrophoneState>()){nint icon=MicrophoneIcon(state);Check(icon!=0,"shared ClipShot tray icon "+state);if(icon!=0)Native.DestroyIcon(icon);}
             Native.PostMessage(hwnd,0x0112,0xF020,0);await Task.Delay(150);
             Check(!AppWindow.IsVisible,"minimize hides the window to the tray");ShowNearCursor();
+            var memoryFixture=await DesktopCapture.Png(new ScreenFrame(0,0,2,2,Enumerable.Repeat((byte)255,16).ToArray()));
+            store.Add("image","",image:memoryFixture);
+            var imageMetadata=store.All(includeImages:false).First(c=>c.Kind=="image");
+            var originalBytes=store.ReadImage(imageMetadata.Id);int beforeImageCopy=store.All(includeImages:false).Count;
+            uint beforeImageSequence=Native.GetClipboardSequenceNumber();
+            await Copy(imageMetadata);
+            Check(imageMetadata.Image is null&&store.All(includeImages:false).Count==beforeImageCopy&&store.ReadImage(imageMetadata.Id)!.SequenceEqual(originalBytes!),"copying image metadata fetches the original without creating a text clip or duplicate");
+            Check(beforeImageSequence==Native.GetClipboardSequenceNumber(),"image metadata copy stays isolated from the system clipboard");
             foreach(var clip in store.All())store.Delete(clip.Id);Render();
             Check(Groups.Children.Count==1&&Groups.Children[0] is Microsoft.UI.Xaml.Controls.TextBlock,"completely empty history has no empty templates heading");
         }

@@ -105,7 +105,7 @@ public sealed partial class MainWindow : Window
     private void CreateTray()
     {
         nint old=tray.Icon;
-        tray=new(){Size=(uint)Marshal.SizeOf<Native.NotifyIcon>(),Hwnd=hwnd,Id=1,Flags=7,Callback=0x8001,Icon=microphoneStarted?MicrophoneIcon(microphoneResult.State):Native.LoadImage(0,Path.Combine(AppContext.BaseDirectory,"Assets","ClipShot.ico"),1,32,32,0x10),Tip=TrayTip,Info="",InfoTitle=""};
+        tray=new(){Size=(uint)Marshal.SizeOf<Native.NotifyIcon>(),Hwnd=hwnd,Id=1,Flags=7,Callback=0x8001,Icon=MicrophoneIcon(microphoneStarted?microphoneResult.State:MicrophoneState.Unavailable),Tip=TrayTip,Info="",InfoTitle=""};
         bool ok=tray.Icon!=0&&Native.Shell_NotifyIcon(trayReady?1u:0u,ref tray);
         if(!ok&&tray.Icon!=0)ok=Native.Shell_NotifyIcon(0,ref tray);
         trayReady=ok;sharedTraySignature=TraySignature;if(old!=0)Native.DestroyIcon(old);
@@ -191,7 +191,7 @@ public sealed partial class MainWindow : Window
         if(exiting)return;
         LifetimeTrace.Write("quit.request");
         if(clipdiaryImportRunning){if(!quitAfterClipdiaryImport)_=CancelImportAndQuit();return;}
-        if(templatePointerRow is not null)EndTemplateDrag();EndWindowPointerGesture();exiting=true;CancelPanelFade();activeDialog?.Hide();sectionFocusTimer.Stop();sectionPopup.IsOpen=false;StopUpdates();StopMicrophone();hoverTimer.Stop();leaveTimer.Stop();cleanupTimer.Stop();
+        if(templatePointerRow is not null)EndTemplateDrag();EndWindowPointerGesture();exiting=true;thumbnailCancellation.Cancel();thumbnailCancellation.Dispose();CancelPanelFade();activeDialog?.Hide();sectionFocusTimer.Stop();sectionPopup.IsOpen=false;StopUpdates();StopMicrophone();hoverTimer.Stop();leaveTimer.Stop();cleanupTimer.Stop();
         captureWindow?.Cancel();
         editor?.Close();
         if(!isolated)Native.RemoveClipboardFormatListener(hwnd);
@@ -271,6 +271,7 @@ public sealed partial class MainWindow : Window
         if(exiting)return;
         try
         {
+            if(clip.Kind=="image"&&clip.Image is null)clip=clip with{Image=store.ReadImage(clip.Id)??throw new InvalidOperationException("Image no longer exists")};
             var feedback=ShowCopyFeedback(clip.Id);
             if(isolated){store.Add(clip.Kind,clip.Text,clip.Html,clip.Rtf,clip.Image);await feedback;if(exiting)return;CollapseSection();Render();return;}
             var data=new DataPackage();data.RequestedOperation=DataPackageOperation.Copy;
@@ -299,11 +300,13 @@ public sealed partial class MainWindow : Window
         templateRenderPending=false;rendering=true;
         try
         {
-            hoverTimer.Stop();preview.IsOpen=false;hovered=null;
+            imageRenderVersion++;thumbnailCancellation.Cancel();thumbnailCancellation.Dispose();thumbnailCancellation=new();
+            foreach(var image in thumbnailImages)image.Source=null;thumbnailImages.Clear();
+            hoverTimer.Stop();preview.IsOpen=false;preview.Child=null;hovered=null;hoverAnchor=null;sectionRows.Children.Clear();
             long? previousId=selected>=0&&selected<visible.Count?visible[selected].Clip.Id:null;
             Groups.Children.Clear();TemplateGroups.Children.Clear();sectionHeadings.Clear();ResetTemplateRenderState();clipPressOverlays.Clear();visible.Clear();
             string query=Search.Text.Trim();
-            var groups=HistoryView.Groups(store.All(),query,store.Get("templateorder",""),DateTime.Today);
+            var groups=HistoryView.Groups(store.All(includeImages:false),query,store.Get("templateorder",""),DateTime.Today);
             // Поиск сохраняет приоритет шаблонов; в панели их постоянное место — внизу.
             var displayGroups=query.Length==0?groups.OrderBy(g=>g.Title=="Шаблоны"?1:0).ToList():groups;
             foreach(var group in displayGroups)
@@ -345,17 +348,17 @@ public sealed partial class MainWindow : Window
         {
             if(!PrepareTemplateFolderRow(title,clip,templateSearch))continue;
             bool folderChild=title=="Шаблоны"&&!templateSearch&&renderedTemplateParents.ContainsKey(clip.Id);
-            var grid=new Grid{ColumnSpacing=12,Margin=new Thickness(folderChild?46:20,10,20,10),MinHeight=30};grid.ColumnDefinitions.Add(new(){Width=new GridLength(clip.Image is null?26:76)});grid.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});grid.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
+            var grid=new Grid{ColumnSpacing=12,Margin=new Thickness(folderChild?46:20,10,20,10),MinHeight=30};grid.ColumnDefinitions.Add(new(){Width=new GridLength(clip.Kind!="image"?26:76)});grid.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});grid.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
             var text=new TextBlock{Text=clip.Kind=="image"&&clip.Name.Length==0?T(clip.ImageSourceId is not null?"Изменённый снимок":"Изображение"):clip.Label,Foreground=primaryBrush,FontSize=14,MaxLines=1,TextTrimming=TextTrimming.CharacterEllipsis,VerticalAlignment=VerticalAlignment.Center};
-            if(clip.Image is not null)
+            if(clip.Kind=="image")
             {
-                var img=new Image{Width=74,Height=44,Stretch=Stretch.UniformToFill};grid.Children.Add(new Border{Child=img,CornerRadius=new CornerRadius(4),HorizontalAlignment=HorizontalAlignment.Left});
+                var img=new Image{Width=74,Height=44,Stretch=Stretch.UniformToFill};thumbnailImages.Add(img);grid.Children.Add(new Border{Child=img,CornerRadius=new CornerRadius(4),HorizontalAlignment=HorizontalAlignment.Left});
                 var sub=new TextBlock{Text="PNG",FontSize=12,Foreground=ClipBrush("ClipSecondaryBrush")};
-                var details=new StackPanel{Spacing=3,VerticalAlignment=VerticalAlignment.Center};details.Children.Add(text);details.Children.Add(sub);Grid.SetColumn(details,1);grid.Children.Add(details);LoadThumbnail(img,sub,clip.Image);
+                var details=new StackPanel{Spacing=3,VerticalAlignment=VerticalAlignment.Center};details.Children.Add(text);details.Children.Add(sub);Grid.SetColumn(details,1);grid.Children.Add(details);LoadThumbnail(img,sub,clip.Id,imageRenderVersion,thumbnailCancellation.Token);
             }
             else {grid.Children.Add(new FontIcon{Glyph=Uri.TryCreate(clip.Text,UriKind.Absolute,out var uri)&&uri.Scheme is "http" or "https"?"\uE71B":"\uE8A5",FontSize=19,Foreground=ClipBrush("ClipSecondaryBrush")});Grid.SetColumn(text,1);grid.Children.Add(text);}
             var time=new TextBlock{Text=clip.Template?"":clip.Seen.Date==DateTime.Today?clip.Seen.ToString("HH:mm"):clip.Seen.ToString("dd.MM"),FontSize=12,Foreground=ClipBrush("ClipSecondaryBrush"),VerticalAlignment=VerticalAlignment.Center};
-            if(clip.Image is not null)
+            if(clip.Kind=="image")
             {
                 var actions=new StackPanel{Orientation=Orientation.Horizontal,Spacing=6,VerticalAlignment=VerticalAlignment.Center};
                 var edit=new Button{Content=new FontIcon{Glyph="\uE70F",FontSize=16},Padding=new Thickness(6),Background=new SolidColorBrush(Microsoft.UI.Colors.Transparent),BorderThickness=new Thickness(0)};
@@ -376,7 +379,7 @@ public sealed partial class MainWindow : Window
             var menu=new MenuFlyout();TrackMenu(menu);
             void Item(string title,Action action){var item=new MenuFlyoutItem{Text=T(title)};item.Click+=(_,_)=>action();menu.Items.Add(item);}
             Item("Копировать",async()=>await Copy(clip));
-            if(clip.Image is not null){Item("Разметить снимок",async()=>await EditImage(clip));Item("Сохранить PNG…",async()=>await SaveImage(clip));}
+            if(clip.Kind=="image"){Item("Разметить снимок",async()=>await EditImage(clip));Item("Сохранить PNG…",async()=>await SaveImage(clip));}
             if(clip.Kind=="text")Item("Копировать как обычный текст",async()=>await Copy(clip,true));
             Item(clip.Template?"Убрать из шаблонов":"В шаблоны · Ctrl+S",()=>{store.Template(clip.Id,!clip.Template);Render();});
             if(clip.Template)
@@ -394,8 +397,25 @@ public sealed partial class MainWindow : Window
         {visible[i].Row.Background=i==selected?ClipBrush("ClipSelectionBrush"):new SolidColorBrush(Microsoft.UI.Colors.Transparent);StyleRow(visible[i].Row.Child,i==selected);if(visible[i].Row.Tag is Border indicator)indicator.Visibility=i==selected?Visibility.Visible:Visibility.Collapsed;}
     }
     private Brush ClipBrush(string key)=>(Brush)((ResourceDictionary)Root.Resources.ThemeDictionaries[Root.ActualTheme==ElementTheme.Light?"Light":"Default"])[key];
-    private static async void LoadThumbnail(Image image,TextBlock detail,byte[] bytes)
-    {try{await LoadImageAsync(image,bytes);if(image.Source is BitmapImage bitmap)detail.Text=$"{bitmap.PixelWidth} × {bitmap.PixelHeight} · PNG";}catch{detail.Text="PNG";}}
+    private int imageRenderVersion;
+    private CancellationTokenSource thumbnailCancellation=new();
+    private readonly List<Image> thumbnailImages=[];
+    private readonly SemaphoreSlim thumbnailGate=new(1,1);
+    private readonly SemaphoreSlim previewGate=new(1,1);
+    private async void LoadThumbnail(Image image,TextBlock detail,long id,int version,CancellationToken token)
+    {
+        try{await thumbnailGate.WaitAsync(token);}catch(OperationCanceledException){return;}
+        try
+        {
+            if(exiting||version!=imageRenderVersion)return;
+            var bytes=store.ReadImage(id);if(bytes is null)return;
+            var size=await LoadImageAsync(image,bytes,148,88);
+            if(!exiting&&version==imageRenderVersion)detail.Text=$"{size.Width} × {size.Height} · PNG";
+            else image.Source=null;
+        }
+        catch{if(!exiting&&version==imageRenderVersion)detail.Text="PNG";}
+        finally{thumbnailGate.Release();}
+    }
     private void RootKeyDown(object sender,KeyRoutedEventArgs e)
     {
         if(e.Handled||dialogOpen||templateDragInProgress)return;
@@ -410,15 +430,27 @@ public sealed partial class MainWindow : Window
     private async void ShowPreview()
     {
         if(exiting||windowResizing||templateDragInProgress)return;
+        var clip=hovered;var anchor=hoverAnchor;int version=imageRenderVersion;if(clip is null||anchor is null)return;
         try
         {
-        var clip=hovered;var anchor=hoverAnchor;if(clip is null||anchor is null)return;overPreview=false;
+        overPreview=false;
         var body=new StackPanel{Spacing=10,Width=400,RequestedTheme=Root.ActualTheme};
         body.Children.Add(new TextBlock{Text=clip.Kind=="image"?T("Изображение"):clip.Name.Length>0?clip.Name:T("Текст"),FontWeight=Microsoft.UI.Text.FontWeights.SemiBold});
-        if(clip.Image is not null){var img=new Image{MaxHeight=420,Stretch=Stretch.Uniform};body.Children.Add(img);await LoadImageAsync(img,clip.Image);}
+        if(clip.Kind=="image")
+        {
+            var img=new Image{MaxHeight=420,Stretch=Stretch.Uniform};body.Children.Add(img);
+            await previewGate.WaitAsync();
+            try
+            {
+                if(exiting||version!=imageRenderVersion||!ReferenceEquals(hovered,clip))return;
+                var bytes=clip.Image??store.ReadImage(clip.Id);if(bytes is null)return;
+                await LoadImageAsync(img,bytes,800,840);
+            }
+            finally{previewGate.Release();}
+        }
         else body.Children.Add(new ScrollViewer{MaxHeight=420,IsTabStop=false,Content=new TextBlock{Text=clip.Text,TextWrapping=TextWrapping.Wrap,IsTextSelectionEnabled=false}});
         body.PointerEntered+=(_,_)=>{overPreview=true;leaveTimer.Stop();};body.PointerExited+=(_,_)=>{overPreview=false;leaveTimer.Start();};
-        if(exiting||windowResizing||templateDragInProgress||hovered?.Id!=clip.Id)return;
+        if(exiting||windowResizing||templateDragInProgress||version!=imageRenderVersion||!ReferenceEquals(hovered,clip)||!ReferenceEquals(hoverAnchor,anchor))return;
         PaintText(body,primaryBrush);
         var border=new Border{Child=body,Padding=new Thickness(16),CornerRadius=new CornerRadius(activeTheme.Corner),BorderThickness=new Thickness(1),RequestedTheme=Root.ActualTheme,Background=ClipBrush("ClipSearchBrush"),BorderBrush=ClipBrush("ClipSeparatorBrush")};
         preview.Child=border;preview.XamlRoot=Root.XamlRoot;
@@ -427,7 +459,7 @@ public sealed partial class MainWindow : Window
         var point=anchor.TransformToVisual(fromSide?sectionBorder!:Root).TransformPoint(new Windows.Foundation.Point(0,0));
         if(fromSide)point=new Windows.Foundation.Point(point.X+sectionPopup.HorizontalOffset,point.Y+sectionPopup.VerticalOffset);
         var area=DisplayArea.GetFromWindowId(AppWindow.Id,DisplayAreaFallback.Nearest).WorkArea;
-        double width=432,height=clip.Image is null?Math.Min(480,80+clip.Text.Length/45*20):500;
+        double width=432,height=clip.Kind!="image"?Math.Min(480,80+clip.Text.Length/45*20):500;
         double right=AppWindow.Position.X+(Root.ActualWidth+width+12)*scale;
         preview.HorizontalOffset=right<=area.X+area.Width?Root.ActualWidth+8:-width-8;
         if(fromSide)
@@ -443,12 +475,19 @@ public sealed partial class MainWindow : Window
         }
         catch
         {
-            if(!exiting){preview.IsOpen=false;Status.Text=T("Не удалось показать предпросмотр этой записи.");}
+            if(!exiting&&version==imageRenderVersion&&ReferenceEquals(hovered,clip)){preview.IsOpen=false;Status.Text=T("Не удалось показать предпросмотр этой записи.");}
         }
     }
-    private static async void LoadImage(Image image,byte[] bytes){try{await LoadImageAsync(image,bytes);}catch{}}
-    private static async Task LoadImageAsync(Image image,byte[] bytes)
-    {using var stream=new InMemoryRandomAccessStream();using(var writer=new DataWriter(stream.GetOutputStreamAt(0))){writer.WriteBytes(bytes);await writer.StoreAsync();}stream.Seek(0);var bitmap=new BitmapImage();await bitmap.SetSourceAsync(stream);image.Source=bitmap;}
+    private static async Task<(uint Width,uint Height)> LoadImageAsync(Image image,byte[] bytes,int maxWidth,int maxHeight)
+    {
+        using var stream=new InMemoryRandomAccessStream();
+        using(var writer=new DataWriter(stream.GetOutputStreamAt(0))){writer.WriteBytes(bytes);await writer.StoreAsync();}
+        stream.Seek(0);var decoder=await BitmapDecoder.CreateAsync(stream);
+        uint width=decoder.PixelWidth,height=decoder.PixelHeight;
+        double scale=Math.Min(1,Math.Min((double)maxWidth/width,(double)maxHeight/height));
+        var bitmap=new BitmapImage{DecodePixelWidth=Math.Max(1,(int)(width*scale)),DecodePixelHeight=Math.Max(1,(int)(height*scale))};
+        stream.Seek(0);await bitmap.SetSourceAsync(stream);image.Source=bitmap;return(width,height);
+    }
     private async Task Rename(Clip clip)
     {
         var text=new TextBox{Text=clip.Name,PlaceholderText=T("Название необязательно")};
@@ -534,6 +573,7 @@ public sealed partial class MainWindow : Window
     }
     private async void SeedSmoke()
     {
+        if(Environment.GetCommandLineArgs().Contains("--memory-benchmark")){await RunMemoryBenchmark();return;}
         if(!Environment.GetCommandLineArgs().Contains("--side-demo"))store.Set("sectionlayout","inline");
         if(Environment.GetCommandLineArgs().Contains("--upgrade-self-test")){RunUpgradeChecks();return;}
         if(Environment.GetCommandLineArgs().Contains("--light"))store.Set("theme","White");

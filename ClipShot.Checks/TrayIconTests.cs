@@ -4,21 +4,21 @@ namespace ClipShot;
 public class TrayIconTests
 {
     private static string IconPath=>Path.Combine(AppContext.BaseDirectory,"Assets","ClipShot.ico");
-    [Theory][InlineData(1,"ClipShot.ico")][InlineData(2,"ClipShot.Muted.ico")]
-    public void SuppliedStateIconIsUsedWithoutRecolouring(int state,string name)
+    [Theory][InlineData(0)][InlineData(1)][InlineData(2)][InlineData(3)]
+    public void Clipboard_stays_bright_and_identical_across_microphone_states(int value)
     {
-        using var icon=new Icon(Path.Combine(Path.GetDirectoryName(IconPath)!,name),32,32);using var original=icon.ToBitmap();using var result=TrayIconRenderer.Render(IconPath,(MicrophoneState)state);
-        for(int y=0;y<32;y++)for(int x=0;x<32;x++)Assert.Equal(original.GetPixel(x,y),result.GetPixel(x,y));
+        var state=(MicrophoneState)value;using var reference=TrayIconRenderer.Render(MicrophoneState.Enabled);using var result=TrayIconRenderer.Render(state);
+        Assert.Equal(0,result.GetPixel(0,0).A);
+        for(int y=2;y<21;y++)for(int x=4;x<29;x++)Assert.Equal(reference.GetPixel(x,y),result.GetPixel(x,y));
+        var blue=result.GetPixel(7,15);Assert.True(blue.B>220&&blue.R<40&&blue.A==255);
+        var paper=result.GetPixel(15,13);Assert.True(paper.R>230&&paper.G>230&&paper.B>230);
     }
-    [Fact]public void UnavailableIsGreyAndKeepsTransparency()
+    [Fact]public void Secondary_microphone_markers_are_distinct()
     {
-        using var icon=new Icon(IconPath,32,32);using var original=icon.ToBitmap();using var result=TrayIconRenderer.Render(IconPath,MicrophoneState.Unavailable);
-        for(int y=0;y<32;y++)for(int x=0;x<32;x++){var colour=result.GetPixel(x,y);Assert.Equal(original.GetPixel(x,y).A,colour.A);Assert.Equal(colour.R,colour.G);Assert.Equal(colour.G,colour.B);}
-    }
-    [Fact]public void MixedAddsAmberBadgeButKeepsMainArtwork()
-    {
-        using var icon=new Icon(IconPath,32,32);using var original=icon.ToBitmap();using var result=TrayIconRenderer.Render(IconPath,MicrophoneState.Mixed);
-        Assert.Equal(original.GetPixel(16,12),result.GetPixel(16,12));var badge=result.GetPixel(25,25);Assert.True(badge.R>230&&badge.G>170&&badge.B<110);
+        var colors=new HashSet<int>();
+        foreach(var state in Enum.GetValues<MicrophoneState>())
+        {using var icon=TrayIconRenderer.Render(state);colors.Add(icon.GetPixel(26,23).ToArgb());}
+        Assert.Equal(4,colors.Count);
     }
     [Theory][InlineData("ClipShot.ico")][InlineData("ClipShot.Muted.ico")]
     public void IconContainsSmallTrayAndLargeExplorerSizes(string name)

@@ -163,9 +163,15 @@ public sealed partial class Store : IDisposable
         if(!DateTimeOffset.TryParse(value,CultureInfo.InvariantCulture,DateTimeStyles.AssumeUniversal,out var result))throw new InvalidDataException("Invalid stored timestamp");
         return result.UtcDateTime;
     }
-    public List<Clip> All()
+    public byte[]? ReadImage(long id)
+    {
+        using var c=db.CreateCommand();c.CommandText="SELECT image FROM clips WHERE id=$id AND kind='image'";c.Parameters.AddWithValue("$id",id);
+        return c.ExecuteScalar() as byte[];
+    }
+    public List<Clip> All(bool includeImages=true)
     {
         using var c = db.CreateCommand(); c.CommandText="SELECT c.id,c.kind,c.text,c.html,c.rtf,c.image,c.template,c.name,c.seen,e.source_id FROM clips c LEFT JOIN image_edits e ON e.clip_id=c.id ORDER BY c.seen DESC,c.id DESC";
+        if(!includeImages)c.CommandText=c.CommandText.Replace("c.image,","NULL,");
         using var r=c.ExecuteReader(); var result=new List<Clip>();
         while(r.Read()) result.Add(new(r.GetInt64(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetString(4),r.IsDBNull(5)?null:(byte[])r[5],r.GetInt64(6)!=0,r.GetString(7),DateTime.Parse(r.GetString(8),null,System.Globalization.DateTimeStyles.RoundtripKind).ToLocalTime()){ImageSourceId=r.IsDBNull(9)?null:r.GetInt64(9)});
         return result;

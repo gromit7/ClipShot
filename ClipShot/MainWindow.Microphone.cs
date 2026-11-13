@@ -62,7 +62,7 @@ public sealed partial class MainWindow
     }
     private static nint MicrophoneIcon(MicrophoneState state)
     {
-        using var bitmap=TrayIconRenderer.Render(Path.Combine(AppContext.BaseDirectory,"Assets","ClipShot.ico"),state);
+        using var bitmap=TrayIconRenderer.Render(state);
         return bitmap.GetHicon();
     }
     private void StopMicrophone()

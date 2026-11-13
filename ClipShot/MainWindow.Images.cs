@@ -17,11 +17,12 @@ public sealed partial class MainWindow
     }
     private async Task EditImage(Clip clip)
     {
-        if(dialogOpen||editor is not null||exiting||clip.Image is null)return;
+        if(dialogOpen||editor is not null||exiting||clip.Kind!="image")return;
         dialogOpen=true;
         try
         {
-            editor=await ScreenshotEditor.CreateAsync(clip.Image,words,Root.RequestedTheme);
+            var bytes=clip.Image??store.ReadImage(clip.Id)??throw new InvalidOperationException("Image no longer exists");
+            editor=await ScreenshotEditor.CreateAsync(bytes,words,Root.RequestedTheme);
             dialogOpen=false;
             if(exiting){editor.Close();return;}
             Hide();byte[]? png=await editor.ShowAsync();editor=null;
@@ -41,12 +42,12 @@ public sealed partial class MainWindow
     }
     private async Task SaveImage(Clip clip)
     {
-        if(dialogOpen||exiting||clip.Image is null||isolated)return;
+        if(dialogOpen||exiting||clip.Kind!="image"||isolated)return;
         dialogOpen=true;
         try
         {
             var picker=new FileSavePicker{SuggestedFileName="ClipShot-"+DateTime.Now.ToString("yyyy-MM-dd-HHmmss"),DefaultFileExtension=".png"};picker.FileTypeChoices.Add("PNG",new List<string>{".png"});picker.FileTypeChoices.Add("JPEG",new List<string>{".jpg",".jpeg"});WinRT.Interop.InitializeWithWindow.Initialize(picker,hwnd);
-            var file=await picker.PickSaveFileAsync();if(file is not null&&!exiting)await FileIO.WriteBytesAsync(file,await DesktopCapture.ExportImage(clip.Image,file.Path));
+            var file=await picker.PickSaveFileAsync();if(file is not null&&!exiting)await FileIO.WriteBytesAsync(file,await DesktopCapture.ExportImage(clip.Image??store.ReadImage(clip.Id)??throw new InvalidOperationException("Image no longer exists"),file.Path));
         }
         catch{if(!exiting)Status.Text=T("Не удалось сохранить снимок.");}
         finally{dialogOpen=false;}
