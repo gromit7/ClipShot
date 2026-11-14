@@ -190,9 +190,13 @@ public sealed partial class MainWindow
             var microphonePanel=new Microsoft.UI.Xaml.Controls.StackPanel();var saveMic=MicrophoneSettings(microphonePanel);
             Check(microphonePanel.Children.Single() is Microsoft.UI.Xaml.Controls.Expander expander&&!expander.IsExpanded,"microphone settings are initially collapsed");
             saveMic();Check(store.Get("micmouse","0")=="0"&&!microphoneStarted,"mouse button is unassigned by default and tests do not change hardware");
-            nint foreground=Native.GetForegroundWindow();
-            var notice=new MicrophoneNotice("Тестовый микрофон включён","Синтетические данные",MicrophoneState.Enabled);await Task.Delay(200);
-            Check(Native.GetForegroundWindow()==foreground,"microphone notice does not steal focus");notice.Close();
+            var notice=new MicrophoneNotice("Тестовый микрофон включён","Синтетические данные",MicrophoneState.Enabled);
+            nint noticeHandle=WinRT.Interop.WindowNative.GetWindowHandle(notice);
+            bool noticeActivated=Native.GetForegroundWindow()==noticeHandle;
+            for(int sample=0;sample<10;sample++){await Task.Delay(20);noticeActivated|=Native.GetForegroundWindow()==noticeHandle;}
+            // The owner can switch applications while this passive check runs.
+            // Verify the notice itself, rather than requiring an unchanged desktop foreground.
+            Check(!noticeActivated&&((long)Native.GetWindowLongPtr(noticeHandle,-20)&0x08000000L)!=0,"microphone notice does not steal focus");notice.Close();
             var releases=ReleaseHistory.Load(Path.Combine(AppContext.BaseDirectory,"Assets","ReleaseHistory.json"),typeof(App).Assembly.GetName().Version!);
             Check(releases.Count==5,"publication contains changes for the five latest installed releases");
             var updateNotice=new MicrophoneNotice("Программа обновлена","Синтетические данные",MicrophoneState.Enabled,preview:true,appNotice:true,history:releases);
