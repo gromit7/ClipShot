@@ -21,14 +21,18 @@ public sealed partial class MainWindow
             // An unaware capture thread virtualizes pixels on scaled displays.
             if(!Native.AreDpiAwarenessContextsEqual(Native.GetThreadDpiAwarenessContext(),(nint)(-4)))
                 throw new InvalidOperationException("Capture UI thread is not PerMonitorV2 DPI aware");
-            byte[] pixels=new byte[800*600*4];for(int y=0;y<600;y++)for(int x=0;x<800;x++){int i=(y*800+x)*4;pixels[i]=(byte)(x%256);pixels[i+1]=(byte)(y%256);pixels[i+2]=100;pixels[i+3]=255;}
+            int testX=Native.GetSystemMetrics(76),testY=Native.GetSystemMetrics(77),testWidth=Native.GetSystemMetrics(78),testHeight=Native.GetSystemMetrics(79);
+            int testBytes=checked(testWidth*testHeight*4);
+            if(testWidth<265||testHeight<190||testBytes>512*1024*1024)throw new InvalidOperationException("Unsupported synthetic desktop geometry");
+            byte[] pixels=new byte[testBytes];for(int y=0;y<testHeight;y++)for(int x=0;x<testWidth;x++){int i=(y*testWidth+x)*4;pixels[i]=(byte)(x%256);pixels[i+1]=(byte)(y%256);pixels[i+2]=100;pixels[i+3]=255;}
             // SetCursor is thread-local until this window owns mouse input. A
             // fixed (0,0) fixture could leave the stationary hardware pointer over
             // another application and incorrectly fail the global cursor check.
-            // Place synthetic pixels under the existing pointer; never move it or
-            // read any screen pixels. Production capture covers the whole desktop.
+            // Cover the virtual desktop with synthetic pixels, as production does,
+            // so normal pointer movement cannot escape an arbitrary 800x600 fixture.
+            // Never move the pointer or read any screen pixels.
             if(!Native.GetCursorPos(out var pointer))throw new InvalidOperationException("Capture test requires an accessible input desktop");
-            var source=new ScreenFrame(checked(pointer.X-400),checked(pointer.Y-300),800,600,pixels);
+            var source=new ScreenFrame(testX,testY,testWidth,testHeight,pixels);
             void CursorCheck(RegionCaptureWindow capture,string message)
             {
                 if(!capture.TestPointerInsideClient)throw new InvalidOperationException("Capture test pointer is outside its actual native client area; "+capture.TestCursorDiagnostics);

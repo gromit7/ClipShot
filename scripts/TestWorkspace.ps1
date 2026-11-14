@@ -20,6 +20,8 @@ function New-ClipShotTestRoot($Scope) {
 }
 function Complete-ClipShotTestScope($Scope) {
     $failures=[Collections.Generic.List[string]]::new()
+    $processSnapshot=@{}
+    if($Scope.Processes.Count){Get-CimInstance Win32_Process -ErrorAction Stop | ForEach-Object {$processSnapshot[[int]$_.ProcessId]=$_}}
     foreach($workspace in $Scope.Roots){
         try{
             # Root может быть передан дочернему приложению только в окружении.
@@ -27,7 +29,7 @@ function Complete-ClipShotTestScope($Scope) {
             foreach($record in $Scope.Processes){
                 # Get-Process can expose a null StartTime when the process exits
                 # between enumeration and property access. CIM provides one snapshot.
-                $process=Get-CimInstance Win32_Process -Filter ("ProcessId="+$record.Id) -ErrorAction Stop
+                $process=$processSnapshot[[int]$record.Id]
                 if($process){
                     if(-not $process.CreationDate){throw 'Process creation time unavailable; scope retained.'}
                     # CIM timestamps retain microseconds, Process.StartTime also
