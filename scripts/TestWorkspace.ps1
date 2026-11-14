@@ -25,8 +25,15 @@ function Complete-ClipShotTestScope($Scope) {
             # Root может быть передан дочернему приложению только в окружении.
             # Проверяем также сохранённые PID+время запуска, не только CommandLine.
             foreach($record in $Scope.Processes){
-                $process=Get-Process -Id $record.Id -ErrorAction SilentlyContinue
-                if($process -and $process.StartTime.ToUniversalTime().Ticks -eq $record.Started){throw 'Owned test process has not exited; scope retained.'}
+                # Get-Process can expose a null StartTime when the process exits
+                # between enumeration and property access. CIM provides one snapshot.
+                $process=Get-CimInstance Win32_Process -Filter ("ProcessId="+$record.Id) -ErrorAction Stop
+                if($process){
+                    if(-not $process.CreationDate){throw 'Process creation time unavailable; scope retained.'}
+                    # CIM timestamps retain microseconds, Process.StartTime also
+                    # retains the final 100 ns digit. Compare at CIM precision.
+                    if($process.CreationDate.ToUniversalTime().Ticks -eq ($record.Started-($record.Started%10))){throw 'Owned test process has not exited; scope retained.'}
+                }
             }
             $prefix=$workspace.Root+'\'
             $busy=@(Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {
