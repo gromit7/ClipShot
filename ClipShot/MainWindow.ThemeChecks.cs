@@ -34,6 +34,7 @@ public sealed partial class MainWindow
         CheckLink(ManualUpdateLink);
         if(Root.ContextFlyout is not MenuFlyout context||context.Items.OfType<MenuFlyoutSubItem>().SingleOrDefault(x=>Equals(x.Tag,"themes")) is not {} menu||menu.Items.Count!=AppThemes.All.Count)
             throw new InvalidOperationException("Context menu is missing theme choices");
+        if(menu.Text!=T("Тема"))throw new InvalidOperationException("Theme menu label is corrupted");
         var selected=menu.Items.OfType<ToggleMenuFlyoutItem>().Where(item=>item.IsChecked).ToArray();
         if(selected.Length!=1||!Equals(selected[0].Tag,activeTheme.Id)||AppThemes.Resolve(store.Get("theme","Default"),activeTheme.Dark).Id!=activeTheme.Id)
             throw new InvalidOperationException("Theme selection and persisted menu state disagree");

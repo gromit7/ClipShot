@@ -102,7 +102,7 @@ public sealed partial class MainWindow
     }
     private MenuFlyoutSubItem ThemeMenu()
     {
-        var menu=new MenuFlyoutSubItem{Text=T("РўРµРјР°"),Tag="themes"};
+        var menu=new MenuFlyoutSubItem{Text=T("Тема"),Tag="themes"};
         foreach(var theme in AppThemes.All)
         {
             var item=new ToggleMenuFlyoutItem{Text=T(theme.Name),IsChecked=theme.Id==activeTheme.Id,Tag=theme.Id};
@@ -115,6 +115,6 @@ public sealed partial class MainWindow
     {
         nint themes=Native.CreatePopupMenu();
         for(int i=0;i<AppThemes.All.Count;i++)Native.AppendMenu(themes,AppThemes.All[i].Id==activeTheme.Id?8u:0u,(nuint)(100+i),T(AppThemes.All[i].Name));
-        Native.AppendMenu(menu,0x10,(nuint)themes,T("РўРµРјР°")); // DestroyMenu(parent) owns this submenu.
+        Native.AppendMenu(menu,0x10,(nuint)themes,T("Тема")); // DestroyMenu(parent) owns this submenu.
     }
 }
