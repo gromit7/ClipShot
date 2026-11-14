@@ -45,7 +45,7 @@ internal sealed class RegionCaptureWindow : Window
     private readonly TaskCompletionSource<bool> surfaceReady=new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int startX,startY;private bool dragging,finished;
     private readonly bool test;
-    public RegionCaptureWindow(ScreenFrame frame,bool test=false,UiText? language=null)
+    public RegionCaptureWindow(ScreenFrame frame,bool test=false,UiText? language=null,bool ignoreHardwareInput=false)
     {
         words=language??new UiText("ru");this.frame=frame;this.test=test;Title=words.Translate("ClipShot — выделение области");
         cursor=new CaptureSelectionCursor(System.IO.Path.Combine(AppContext.BaseDirectory,"Assets","Selection.cur"));
@@ -66,7 +66,7 @@ internal sealed class RegionCaptureWindow : Window
         guides.Children.Add(outlineShadow);guides.Children.Add(outline);foreach(var corner in corners)guides.Children.Add(corner);guides.Children.Add(sizeBadge);surface.Children.Add(guides);
         surface.Children.Add(new Border{Background=new SolidColorBrush(Windows.UI.Color.FromArgb(230,32,32,32)),CornerRadius=new CornerRadius(8),Padding=new Thickness(18,10,18,10),Margin=new Thickness(20),HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Top,IsHitTestVisible=false,Child=new TextBlock{Text=words.Translate("Выделите область мышью · Esc — отмена"),Foreground=new SolidColorBrush(Microsoft.UI.Colors.White)}});
         focus.Content=surface;Content=focus;
-        surface.PointerPressed+=Pressed;surface.PointerMoved+=Moved;surface.PointerReleased+=Released;
+        if(!ignoreHardwareInput){surface.PointerPressed+=Pressed;surface.PointerMoved+=Moved;surface.PointerReleased+=Released;}
         surface.Loaded+=(_,_)=>
         {
             if(finished)return;
@@ -102,7 +102,7 @@ internal sealed class RegionCaptureWindow : Window
             cursor.Apply();surfaceReady.TrySetResult(true);
         };
         CompositionTarget.Rendering+=RenderPending;
-        surface.PointerCaptureLost+=(_,_)=>{if(dragging){dragging=false;Reset();}};
+        if(!ignoreHardwareInput)surface.PointerCaptureLost+=(_,_)=>{if(dragging){dragging=false;Reset();}};
         focus.AddHandler(UIElement.KeyDownEvent,new KeyEventHandler((_,e)=>{if(e.Key==VirtualKey.Escape){e.Handled=true;Cancel();}}),true);
         Closed+=(_,_)=>
         {
@@ -171,6 +171,7 @@ internal sealed class RegionCaptureWindow : Window
     private static void PositionBorder(Rectangle border,PixelRegion r,double sx,double sy)
     {border.Visibility=Visibility.Visible;border.Width=r.Width*sx;border.Height=r.Height*sy;Canvas.SetLeft(border,r.X*sx);Canvas.SetTop(border,r.Y*sy);}
     internal void PreviewTestSelection(PixelRegion region){dragging=true;pendingRegion=region;}
+    internal bool TestSelectionRendered(PixelRegion region)=>lastRegion==region;
     internal void CompleteTest(PixelRegion region)
     {if(test&&lastRegion!=region)throw new InvalidOperationException("Pending selection was not rendered");Finish(frame.Crop(region));}
     internal bool HasSelectionCursor=>surface.HasSelectionCursor;

@@ -36,7 +36,7 @@ public sealed partial class MainWindow
                 if(!capture.HasSelectionCursor||!capture.SelectionCursorIsCurrent)throw new InvalidOperationException(message+"; "+capture.TestCursorDiagnostics);
             }
             nint previousCursor=CaptureSelectionCursor.CurrentHandle;
-            var window=new RegionCaptureWindow(source,true);var task=window.SelectAsync();
+            var window=new RegionCaptureWindow(source,true,ignoreHardwareInput:!interactive);var task=window.SelectAsync();
             // Check the first loaded surface, not an HWND whose XAML input site
             // has not been created yet. No pointer movement or cursor test repair.
             await window.TestSurfaceReady.WaitAsync(TimeSpan.FromSeconds(2));
@@ -46,7 +46,9 @@ public sealed partial class MainWindow
             {
                 await Task.Delay(400);
                 CursorCheck(window,"XAML replaced the stationary capture cursor");
-                window.PreviewTestSelection(new PixelRegion(25,30,240,160));await Task.Delay(150);
+                var previewRegion=new PixelRegion(25,30,240,160);window.PreviewTestSelection(previewRegion);
+                var renderDeadline=DateTime.UtcNow.AddSeconds(2);
+                while(!window.TestSelectionRendered(previewRegion)&&DateTime.UtcNow<renderDeadline)await Task.Delay(20);
                 CursorCheck(window,"Selection rendering replaced the capture cursor");
                 window.CompleteTest(new PixelRegion(25,30,240,160));
             }
@@ -59,7 +61,7 @@ public sealed partial class MainWindow
             if(!interactive&&(selection.Width!=240||selection.Height!=160))throw new InvalidOperationException("Crop mismatch");
             store.Add("image","",image:png);Render();
             previousCursor=CaptureSelectionCursor.CurrentHandle;
-            var cancelWindow=new RegionCaptureWindow(source,true);var cancel=cancelWindow.SelectAsync();
+            var cancelWindow=new RegionCaptureWindow(source,true,ignoreHardwareInput:true);var cancel=cancelWindow.SelectAsync();
             await cancelWindow.TestSurfaceReady.WaitAsync(TimeSpan.FromSeconds(2));await Task.Delay(100);
             CursorCheck(cancelWindow,"Repeated capture did not install its cursor");
             cancelWindow.CheckClientEdges();cancelWindow.Cancel();if(await cancel is not null)throw new InvalidOperationException("Cancel mismatch");
