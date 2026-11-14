@@ -64,7 +64,7 @@ public sealed partial class MainWindow
         Item("Переименовать папку…",()=>_=RenameTemplateFolder(folder));
         Item("Переместить выше",()=>MoveTemplateEntryByOffset(TemplateFolderKey(folder.Id),-1));
         Item("Переместить ниже",()=>MoveTemplateEntryByOffset(TemplateFolderKey(folder.Id),1));
-        Item("Разобрать папку",()=>UngroupTemplateFolder(folder.Id));button.ContextFlyout=menu;
+        Item("Разобрать папку",()=>UngroupTemplateFolder(folder.Id));menu.Items.Add(new MenuFlyoutSeparator());menu.Items.Add(ThemeMenu());button.ContextFlyout=menu;
         AttachTemplateDrag(border,TemplateFolderKey(folder.Id));ClipRows.Children.Add(border);templateFolderButtons[folder.Id]=button;templateFolderHeaderRows[folder.Id]=border;
     }
     private SolidColorBrush FolderHeaderBrush()
@@ -73,7 +73,7 @@ public sealed partial class MainWindow
         // Отступ и направляющая сохраняют иерархию и без цветоразличения.
         var header=ThemeColor(activeTheme.Window);
         var selection=((SolidColorBrush)ClipBrush("ClipSelectionBrush")).Color;
-        byte Mix(byte a,byte b)=>(byte)(a+(b-a)*.55);
+        byte Mix(byte a,byte b)=>(byte)(a+(b-a)*.08);
         return new(Windows.UI.Color.FromArgb(255,Mix(header.R,selection.R),Mix(header.G,selection.G),Mix(header.B,selection.B)));
     }
     private static bool IsTemplateFolderKeySource(DependencyObject? source)

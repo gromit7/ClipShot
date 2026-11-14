@@ -4,7 +4,7 @@ public sealed partial class MainWindow
     private void ShowInstalledHistory(bool installed)
     {
         if(isolated||exiting)return;
-        updateFeedbackTimer.Stop();installationNotice?.Close();
+        updateFeedbackTimer.Stop();CloseUpdateNotice();
         installationNotice=CreateInstalledHistoryNotice(installed);
         LifetimeTrace.Write("update.notice-created");
         installationNotice.Closed+=(_,_)=>LifetimeTrace.Write("update.notice-closed");

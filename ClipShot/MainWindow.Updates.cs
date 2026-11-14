@@ -35,7 +35,7 @@ public sealed partial class MainWindow
         var skip=Environment.GetCommandLineArgs().FirstOrDefault(a=>a.StartsWith("--skip-update="));
         if(skip is not null)store.Set("updateskip",skip["--skip-update=".Length..]);
         ResumePendingUpdate();
-        updateFeedbackTimer.Tick+=(_,_)=>{updateFeedbackTimer.Stop();installationNotice?.Close();installationNotice=null;};
+        updateFeedbackTimer.Tick+=(_,_)=>{updateFeedbackTimer.Stop();CloseUpdateNotice();installationNotice=null;};
         updateClient=new();updateTimer.Tick+=async(_,_) =>
         {
             updateTimer.Interval=TimeSpan.FromSeconds(15);
@@ -98,11 +98,11 @@ public sealed partial class MainWindow
         updatePulseActive=ready;updatePulse.Stop();updatePulse.Children.Clear();
         if(ready)
         {
-            var fade=new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation{From=.5,To=1,AutoReverse=true,RepeatBehavior=Microsoft.UI.Xaml.Media.Animation.RepeatBehavior.Forever,Duration=new Duration(TimeSpan.FromMilliseconds(1200))};
+            var fade=new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation{From=.85,To=1,AutoReverse=true,RepeatBehavior=Microsoft.UI.Xaml.Media.Animation.RepeatBehavior.Forever,Duration=new Duration(TimeSpan.FromMilliseconds(1200))};
             Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(fade,ManualUpdateLink);
             Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(fade,"Opacity");updatePulse.Children.Add(fade);updatePulse.Begin();
         }
-        else ManualUpdateLink.Opacity=.6;
+        else ManualUpdateLink.Opacity=1;
     }
     private async void ManualUpdateClick(object sender,RoutedEventArgs e)
     {
@@ -134,10 +134,10 @@ public sealed partial class MainWindow
         availableUpdate=candidate;
         if(!explicitRequest&&availableUpdate is {IsRollback:false}&&availableUpdate.Version.ToString()==store.Get("updateskip",""))availableUpdate=null;
     }
-    private async Task CheckUpdates(bool manual)
+    private async Task CheckUpdates(bool manual,bool isolatedTest=false)
     {
-        if(isolated||exiting||updateChecking||updateDownloading||updateInstalling||updateApplying||updateClient is null)return;
-        updateChecking=true;updateMetadataValid=false;bool download=false;ShowUpdateOffer();
+        if((isolated&&!isolatedTest)||exiting||updateChecking||updateDownloading||updateInstalling||updateApplying||updateClient is null)return;
+        updateChecking=true;updateMetadataValid=false;bool download=false;string? feedback=null;string feedbackDetail="";ShowUpdateOffer();
         try
         {
             var checkedUpdate=await updateClient.CheckAsync(typeof(App).Assembly.GetName().Version!,updateStop.Token);
@@ -149,17 +149,20 @@ public sealed partial class MainWindow
             }
             if(manual||manualUpdateRequested)
             {
-                if(availableUpdate is null)ShowUpdateMessage("Обновлений нет",NoUpdatesVersionDetail);
+                if(availableUpdate is null){feedback="Обновлений нет";feedbackDetail=NoUpdatesVersionDetail;}
                 else
                 {
-                    ShowUpdateMessage(availableUpdate.IsRollback?"Восстановление версии":"Новая версия",availableUpdate.Version.ToString());
+                    feedback=availableUpdate.IsRollback?"Восстановление версии":"Новая версия";feedbackDetail=availableUpdate.Version.ToString();
                     download=true;
                 }
             }
         }
-        catch(OperationCanceledException){nextUpdateCheckAttempt=DateTime.UtcNow.AddMinutes(30);if(!exiting&&(manual||manualUpdateRequested))ShowUpdateMessage("Не удалось проверить обновления","Повторите позже.");}
-        catch{nextUpdateCheckAttempt=DateTime.UtcNow.AddMinutes(30);if(!exiting&&(manual||manualUpdateRequested))ShowUpdateMessage("Не удалось проверить обновления","Повторите позже.");}
+        catch(OperationCanceledException){nextUpdateCheckAttempt=DateTime.UtcNow.AddMinutes(30);if(!exiting&&(manual||manualUpdateRequested)){feedback="Не удалось проверить обновления";feedbackDetail="Не удалось связаться с сервером обновлений. Повторите позже.";}}
+        catch(System.Net.Http.HttpRequestException){nextUpdateCheckAttempt=DateTime.UtcNow.AddMinutes(30);if(!exiting&&(manual||manualUpdateRequested)){feedback="Не удалось проверить обновления";feedbackDetail="Не удалось связаться с сервером обновлений. Повторите позже.";}}
+        catch(Exception error){LifetimeTrace.Write("update.check-failed",error);nextUpdateCheckAttempt=DateTime.UtcNow.AddMinutes(30);if(!exiting&&(manual||manualUpdateRequested)){feedback="Не удалось проверить обновления";feedbackDetail="Проверка завершилась ошибкой. Повторите позже.";}}
         finally{updateChecking=false;ShowUpdateOffer();}
+        // Presentation failures must never turn a successful check into a network failure.
+        if(feedback is not null&&!exiting)ShowUpdateMessage(feedback,feedbackDetail);
         if(download&&updateMetadataValid&&!exiting)await DownloadUpdate(false);
         else if(!updateDownloading)manualUpdateRequested=false;
     }
@@ -168,12 +171,24 @@ public sealed partial class MainWindow
     private void UpdateFooterVisibility()=>FooterSurface.Visibility=Status.Visibility==Visibility.Visible?Visibility.Visible:Visibility.Collapsed;
     private void DismissUpdate(object sender,RoutedEventArgs e){ }
     private async void InstallUpdateClick(object sender,RoutedEventArgs e)=>await CheckUpdatesFromTray();
+    private (string Title,string Detail)? lastUpdateFeedback;
+    private void CloseUpdateNotice()
+    {
+        var notice=installationNotice;installationNotice=null;
+        if(notice is null||notice.IsClosed)return;
+        try{notice.Close();}catch(System.Runtime.InteropServices.COMException){}catch(ObjectDisposedException){}
+    }
     private void ShowUpdateMessage(string title,string detail="",bool persistent=false)
     {
+        lastUpdateFeedback=(title,detail);
         if(isolated||exiting)return;
-        updateFeedbackTimer.Stop();installationNotice?.Close();
-        installationNotice=new(T(title),T(detail),MicrophoneState.Enabled,appNotice:true);
-        if(!persistent)updateFeedbackTimer.Start();
+        updateFeedbackTimer.Stop();CloseUpdateNotice();
+        try
+        {
+            installationNotice=new(T(title),T(detail),MicrophoneState.Enabled,appNotice:true);
+            if(!persistent)updateFeedbackTimer.Start();
+        }
+        catch(Exception error){LifetimeTrace.Write("update.notice-failed",error);Status.Text=T(title)+" · "+T(detail);}
     }
     private async Task DownloadUpdate(bool automatic)
     {
@@ -284,5 +299,5 @@ public sealed partial class MainWindow
         }
         catch{startupUpdatePending=false;try{File.Delete(PendingUpdateFile);}catch{}}
     }
-    private void StopUpdates(){updatePulse.Stop();installationNotice?.Close();updateFeedbackTimer.Stop();updateTimer.Stop();updateStop.Cancel();updateClient?.Dispose();}
+    private void StopUpdates(){updatePulse.Stop();CloseUpdateNotice();updateFeedbackTimer.Stop();updateTimer.Stop();updateStop.Cancel();updateClient?.Dispose();}
 }

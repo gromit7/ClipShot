@@ -8,6 +8,19 @@ public sealed class UiText(string? language)
     public static string Russian(string text)=>EnglishText.FirstOrDefault(p=>p.Value==text).Key??text;
     private static readonly Dictionary<string,string> EnglishText=new(StringComparer.Ordinal)
     {
+        ["Светлая"]="Light",
+        ["Чёрная OLED"]="OLED black",
+        ["Тёмная графитовая"]="Graphite dark",
+        ["Тёмный градиент"]="Dark gradient",
+        ["Полупрозрачная (акрил)"]="Translucent acrylic",
+        ["Светлая бежевая"]="Beige light",
+        ["Тёмная синяя"]="Navy dark",
+        ["Светлая зелёная"]="Mint light",
+        ["Звук механического затвора после снимка"]="Mechanical shutter sound after capture",
+        ["Прослушать звук затвора"]="Preview shutter sound",
+        ["Темы:"]="Themes:",
+        ["Не удалось связаться с сервером обновлений. Повторите позже."]="Unable to reach the update server. Try again later.",
+        ["Проверка завершилась ошибкой. Повторите позже."]="The check could not be completed. Try again later.",
         ["Вписать"]="Fit",
         ["Исходный размер: один пиксель снимка — один пиксель экрана"]="Original size: one image pixel per screen pixel",
         ["Редактор: стрелки, рамки, текст, мозаика, скрытие, отмена и повтор. «Копировать в буфер» сохраняет правку рядом с исходником и копирует результат. «Экспорт» — PNG или JPEG. «100%» показывает исходные пиксели; Ctrl + колесо меняет масштаб."]="Editor: arrows, rectangles, text, mosaic, redaction, undo and redo. Copy saves an edited copy beside the original and copies the result. Export: PNG or JPEG. 100% shows original pixels; Ctrl + wheel zooms.",

@@ -144,10 +144,10 @@ public sealed partial class MainWindow : Window
             if(mouse==0x0205)
             {
                 Native.GetCursorPos(out var p);Native.SetForegroundWindow(hwnd);
-                nint menu=Native.CreatePopupMenu();Native.AppendMenu(menu,0,1,T("Открыть историю"));Native.AppendMenu(menu,0,4,T("Снимок выделенной области"));if(microphoneStarted)Native.AppendMenu(menu,0,5,MicrophoneText(microphoneResult.State)+" · "+T("Переключить"));Native.AppendMenu(menu,0,6,T("Проверить обновление"));Native.AppendMenu(menu,AlwaysOnTop?8u:0u,7,T("Всегда поверх окон"));Native.AppendMenu(menu,0,2,T("Настройки"));Native.AppendMenu(menu,0,3,T("Выход"));
+                nint menu=Native.CreatePopupMenu();Native.AppendMenu(menu,0,1,T("Открыть историю"));Native.AppendMenu(menu,0,4,T("Снимок выделенной области"));if(microphoneStarted)Native.AppendMenu(menu,0,5,MicrophoneText(microphoneResult.State)+" · "+T("Переключить"));Native.AppendMenu(menu,0,6,T("Проверить обновление"));Native.AppendMenu(menu,AlwaysOnTop?8u:0u,7,T("Всегда поверх окон"));AppendTrayThemes(menu);Native.AppendMenu(menu,0,2,T("Настройки"));Native.AppendMenu(menu,0,3,T("Выход"));
                 int command;openMenus++;CancelPanelFade();
                 try{command=Native.TrackPopupMenu(menu,0x100,p.X,p.Y,0,hwnd,0);}finally{Native.DestroyMenu(menu);openMenus--;}
-                DispatcherQueue.TryEnqueue(()=>{if(command==1)ShowNearCursor();if(command==2){ShowNearCursor();SettingsClick(this,new());}if(command==4)TakeScreenshot();if(command==5)RefreshMicrophone(true);if(command==6)_=CheckUpdatesFromTray();if(command==7)ToggleAlwaysOnTop();if(command==3)Quit();});
+                DispatcherQueue.TryEnqueue(()=>{if(command>=100&&command<100+AppThemes.All.Count)SelectTheme(AppThemes.All[command-100].Id);if(command==1)ShowNearCursor();if(command==2){ShowNearCursor();SettingsClick(this,new());}if(command==4)TakeScreenshot();if(command==5)RefreshMicrophone(true);if(command==6)_=CheckUpdatesFromTray();if(command==7)ToggleAlwaysOnTop();if(command==3)Quit();});
             }
             return 0;
         }
@@ -219,7 +219,7 @@ public sealed partial class MainWindow : Window
             // No full-desktop image is written to disk. Only the selected crop enters history.
             using var stream=new InMemoryRandomAccessStream();using(var writer=new DataWriter(stream.GetOutputStreamAt(0))){writer.WriteBytes(png);await writer.StoreAsync();}stream.Seek(0);
             if(!isolated){var data=new DataPackage{RequestedOperation=DataPackageOperation.Copy};data.SetBitmap(RandomAccessStreamReference.CreateFromStream(stream));Clipboard.SetContent(data);Clipboard.Flush();ownSequence=Native.GetClipboardSequenceNumber();}
-            if(exiting)return;store.Add("image","",image:png);Render();
+            if(exiting)return;store.Add("image","",image:png);if(!isolated&&store.Get("capturesound","1")=="1")CaptureSound.Play();Render();
             if(shellTest)WriteShellReport($"Crop={selectedFrame.Width}x{selectedFrame.Height}");
         }
         catch
@@ -319,7 +319,7 @@ public sealed partial class MainWindow : Window
             if(!AllSectionsCollapsed)preserveCollapsedPosition=false;
             DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,DockCollapsedPanel);
             selected=previousId.HasValue?visible.FindIndex(v=>v.Clip.Id==previousId):-1;
-            if(selected<0&&visible.Count>0)selected=0;Highlight();
+            if(selected<0&&visible.Count>0)selected=0;Highlight();ApplyThemedControls(Root);if(sectionBorder is not null)ApplyThemedControls(sectionBorder);
         }
         finally{rendering=false;}
     }
@@ -328,10 +328,10 @@ public sealed partial class MainWindow : Window
         if(clips.Count==0)return;
         bool open=buildingSection||searching||(SideSections?activeSection==title:expanded.GetValueOrDefault(title));
         var heading=new Grid{ColumnSpacing=10};heading.ColumnDefinitions.Add(new(){Width=new GridLength(14)});heading.ColumnDefinitions.Add(new(){Width=new GridLength(20)});heading.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});heading.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
-        var arrow=new FontIcon{Glyph=open?"\uE70D":"\uE76C",FontSize=11};heading.Children.Add(arrow);
-        if(title is "Шаблоны" or "Сегодня"){var icon=new FontIcon{Glyph=title=="Шаблоны"?"\uE8A5":"\uE823",FontSize=18,Foreground=ClipBrush("ClipSecondaryBrush")};Grid.SetColumn(icon,1);heading.Children.Add(icon);}
-        var label=new TextBlock{Text=T(title),FontSize=12,CharacterSpacing=30,FontWeight=Microsoft.UI.Text.FontWeights.SemiBold};Grid.SetColumn(label,2);heading.Children.Add(label);
-        var count=new TextBlock{Text=clips.Count.ToString(),FontSize=11,Foreground=ClipBrush("ClipSecondaryBrush")};Grid.SetColumn(count,3);heading.Children.Add(count);
+        var arrow=new FontIcon{Foreground=titleBrush,Glyph=open?"\uE70D":"\uE76C",FontSize=11};heading.Children.Add(arrow);
+        if(title is "Шаблоны" or "Сегодня"){var icon=new FontIcon{Glyph=title=="Шаблоны"?"\uE8A5":"\uE823",FontSize=18,Foreground=titleBrush};Grid.SetColumn(icon,1);heading.Children.Add(icon);}
+        var label=new TextBlock{Foreground=titleBrush,FontFamily=new FontFamily(activeTheme.Font),Text=T(title),FontSize=12,CharacterSpacing=30,FontWeight=Microsoft.UI.Text.FontWeights.SemiBold};Grid.SetColumn(label,2);heading.Children.Add(label);
+        var count=new TextBlock{Text=clips.Count.ToString(),FontSize=11,Foreground=titleBrush};Grid.SetColumn(count,3);heading.Children.Add(count);
         var headerBackground=new Border{Child=heading,Background=ClipBrush("ClipHeaderBrush"),BackgroundTransition=new BrushTransition{Duration=TimeSpan.FromMilliseconds(160)},Padding=new Thickness(18,0,20,0)};
         var button=new Button{Content=headerBackground,Height=40,CornerRadius=new CornerRadius(0),HorizontalAlignment=HorizontalAlignment.Stretch,HorizontalContentAlignment=HorizontalAlignment.Stretch,Background=new SolidColorBrush(Microsoft.UI.Colors.Transparent),BorderThickness=new Thickness(0),Padding=new Thickness(0),FocusVisualPrimaryBrush=ClipBrush("ClipSeparatorBrush"),FocusVisualSecondaryBrush=ClipBrush("ClipHeaderBrush")};
         foreach(var key in new[]{"ButtonBackgroundPointerOver","ButtonBackgroundPressed","ButtonBackgroundDisabled"})button.Resources[key]=new SolidColorBrush(Microsoft.UI.Colors.Transparent);
@@ -340,7 +340,7 @@ public sealed partial class MainWindow : Window
         var calmHover=new SolidColorBrush(Windows.UI.Color.FromArgb(255,Blend(calmBase.R,calmSelection.R),Blend(calmBase.G,calmSelection.G),Blend(calmBase.B,calmSelection.B)));
         button.PointerEntered+=(_,_)=>{hoverTimer.Stop();hovered=null;preview.IsOpen=false;headerBackground.Background=calmHover;};
         button.PointerExited+=(_,_)=>{headerBackground.Background=ClipBrush("ClipHeaderBrush");};
-        button.Click+=(_,_)=>ToggleSection(title);ClipRows.Children.Add(new Border{Child=button,BorderBrush=ClipBrush("ClipSeparatorBrush"),BorderThickness=new Thickness(0,0,0,1)});
+        button.Click+=(_,_)=>ToggleSection(title);ClipRows.Children.Add(ThemeSectionFrame(button));
         if(!buildingSection){sectionHeadings[title]=button;}
         if(!open||SideSections&&!buildingSection)return;
         bool templateSearch=Search.Text.Trim().Length>0;
@@ -361,7 +361,8 @@ public sealed partial class MainWindow : Window
             if(clip.Kind=="image")
             {
                 var actions=new StackPanel{Orientation=Orientation.Horizontal,Spacing=6,VerticalAlignment=VerticalAlignment.Center};
-                var edit=new Button{Content=new FontIcon{Glyph="\uE70F",FontSize=16},Padding=new Thickness(6),Background=new SolidColorBrush(Microsoft.UI.Colors.Transparent),BorderThickness=new Thickness(0)};
+                var edit=new Button{Tag="clip-image-action",Content=new FontIcon{Foreground=primaryBrush,Glyph="\uE70F",FontSize=16},Padding=new Thickness(6),Background=new SolidColorBrush(Microsoft.UI.Colors.Transparent),BorderThickness=new Thickness(0)};
+                edit.Resources["ButtonBackgroundPointerOver"]=new SolidColorBrush(Microsoft.UI.Colors.Transparent);edit.Resources["ButtonBackgroundPressed"]=new SolidColorBrush(Microsoft.UI.Colors.Transparent);
                 ToolTipService.SetToolTip(edit,T("Разметить снимок"));Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(edit,T("Разметить снимок"));
                 edit.Click+=async(_,_)=>await EditImage(clip);actions.Children.Add(edit);actions.Children.Add(time);Grid.SetColumn(actions,2);grid.Children.Add(actions);
             }
@@ -388,7 +389,7 @@ public sealed partial class MainWindow : Window
                 Item("Переместить выше",()=>MoveTemplate(clip.Id,-1));
                 Item("Переместить ниже",()=>MoveTemplate(clip.Id,1));
             }
-            Item("Удалить",()=>{store.Delete(clip.Id);Render();});row.ContextFlyout=menu;
+            Item("Удалить",()=>{store.Delete(clip.Id);Render();});menu.Items.Add(new MenuFlyoutSeparator());menu.Items.Add(ThemeMenu());row.ContextFlyout=menu;
         }
     }
     private void Highlight()
@@ -535,6 +536,8 @@ public sealed partial class MainWindow : Window
         var keys=HotkeyCombo("Открыть историю","key","ctrl",112);panel.Children.Add(keys);
         var shotKeys=HotkeyCombo("Снимок выделенной области","shotkey","shotctrl",113);panel.Children.Add(shotKeys);
         var shiftPrint=new CheckBox{Content=T("Также Shift+PrintScreen — снимок области"),IsChecked=store.Get("shiftprint","1")=="1"};panel.Children.Add(shiftPrint);
+        var shutterSound=new CheckBox{Content=T("Звук механического затвора после снимка"),IsChecked=store.Get("capturesound","1")=="1"};panel.Children.Add(shutterSound);
+        var previewSound=new Button{Content=T("Прослушать звук затвора")};previewSound.Click+=(_,_)=>{if(!isolated)CaptureSound.Play();};panel.Children.Add(previewSound);
         var keyError=new TextBlock{TextWrapping=TextWrapping.Wrap,MaxWidth=340};panel.Children.Add(keyError);
         var startup=new CheckBox{Content=T("Запускать с Windows"),IsChecked=store.Get("startup","1")=="1"};panel.Children.Add(startup);
         var autopaste=new ComboBox{Header=T("При выборе клипа"),HorizontalAlignment=HorizontalAlignment.Stretch};autopaste.Items.Add(T("Только в буфер"));autopaste.Items.Add(T("В буфер и в предыдущее приложение"));autopaste.SelectedIndex=store.Get("autopaste","0")=="1"?1:0;panel.Children.Add(autopaste);
@@ -565,7 +568,7 @@ public sealed partial class MainWindow : Window
         };
         var result=await ShowDialogAsync(dialog,dismissOnExternalFocus:true);
         if(exiting||result!=ContentDialogResult.Primary)return;
-        store.Set("shiftprint",shiftPrint.IsChecked==true?"1":"0");if(!isolated)RegisterScreenshotAlias();
+        store.Set("capturesound",shutterSound.IsChecked==true?"1":"0");store.Set("shiftprint",shiftPrint.IsChecked==true?"1":"0");if(!isolated)RegisterScreenshotAlias();
         store.Set("sectionlayout",sectionLayout.SelectedIndex==1?"inline":"side");
         store.Set("days",days.SelectedIndex switch{0=>"30",2=>"0",_=>"90"});store.Set("theme",AppThemes.All[Math.Max(0,theme.SelectedIndex)].Id);
         try{if(!isolated)SetStartup(startup.IsChecked==true);store.Set("startup",startup.IsChecked==true?"1":"0");}catch{Status.Text=T("Не удалось изменить автозапуск.");}
@@ -604,6 +607,7 @@ public sealed partial class MainWindow : Window
         {await RunCaptureChecks(Environment.GetCommandLineArgs().Contains("--capture-demo"));return;}
         if(Environment.GetCommandLineArgs().Contains("--demo"))
         {
+            if(Environment.GetCommandLineArgs().Contains("--theme-preview-cycle")){await RunThemePreviewCycle();return;}
             if(Environment.GetCommandLineArgs().Contains("--install-preview"))installationNotice=new MicrophoneNotice("ClipShot обновлён","Работает в трее · Alt+F1 — история",MicrophoneState.Enabled,true,true,
                 ReleaseHistory.Load(Path.Combine(AppContext.BaseDirectory,"Assets","ReleaseHistory.json"),typeof(App).Assembly.GetName().Version!));
             if(Environment.GetCommandLineArgs().Contains("--microphone-preview"))
@@ -625,7 +629,8 @@ public sealed partial class MainWindow : Window
             var p=SettingsButton.TransformToVisual(Root).TransformPoint(new Windows.Foundation.Point(0,0));
             bool layout=Search.Visibility==Visibility.Collapsed&&SearchToggle.ActualHeight>=30&&SearchToggle.ActualWidth>=30&&Search.PlaceholderText.Length==0&&SearchToggle.TransformToVisual(Root).TransformPoint(new Windows.Foundation.Point()).Y>=HistoryScroll.ActualHeight&&HeaderSurface.Visibility==Visibility.Collapsed&&Root.ContextFlyout is MenuFlyout;
             bool pass=layout&&Root.XamlRoot is not null&&visible.Count==6;
-            File.WriteAllText(Path.Combine(dataFolder,"ui-ok.txt"),$"{(pass?"PASS":"FAIL")} WinUI launched; visible rows={visible.Count}; XamlRoot={Root.XamlRoot is not null}; Theme={Root.ActualTheme}; ThemeId={activeTheme.Id}; Acrylic={SystemBackdrop is DesktopAcrylicBackdrop}; Layout={layout}; CaptionInset={AppWindow.TitleBar.RightInset}; SearchWidth={Search.ActualWidth}; SettingsX={p.X}");
+            try{CheckThemeSurfaces();}catch(Exception error){pass=false;File.WriteAllText(Path.Combine(dataFolder,"theme-error.txt"),error.ToString());}
+            File.WriteAllText(Path.Combine(dataFolder,"ui-ok.txt"),$"{(pass?"PASS":"FAIL")} WinUI launched; visible rows={visible.Count}; XamlRoot={Root.XamlRoot is not null}; Theme={Root.ActualTheme}; ThemeId={activeTheme.Id}; Acrylic={SystemBackdrop is DesktopAcrylicBackdrop}; Contrast={pass}; Layout={layout}; CaptionInset={AppWindow.TitleBar.RightInset}; SearchWidth={Search.ActualWidth}; SettingsX={p.X}");
             if(Environment.GetCommandLineArgs().Contains("--interaction-self-test"))pass=await RunInteractionChecks()&&pass;
             if(!pass)Environment.ExitCode=1;Quit();
         };timer.Start();

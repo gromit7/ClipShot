@@ -11,6 +11,8 @@ public sealed partial class MainWindow
         void Check(bool ok,string name){results.Add($"{(ok?"PASS":"FAIL")} {name}");}
         try
         {
+            await CheckAllThemes(Check);
+            await CheckUpdateFeedback(Check);
             Check(TrayTip.Contains(typeof(App).Assembly.GetName().Version!.ToString(3)),"tray tooltip includes installed version");
             Check(ManualUpdateLink.Visibility==Visibility.Visible&&ManualUpdateLink.IsEnabled&&ManualUpdateLink.Content.ToString()=="Проверить обновление","quiet manual update action is always visible at bottom");
             preparedInstaller="synthetic-not-executed.exe";updateMetadataValid=true;ShowUpdateOffer();

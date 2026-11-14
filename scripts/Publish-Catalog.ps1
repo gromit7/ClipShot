@@ -2,7 +2,7 @@
     [Parameter(Mandatory=$true)][string]$Version,
     [Parameter(Mandatory=$true)][string]$Setup,
     [string]$Hook='D:/Мои документы/codex-projects/data-clouds.ru/scripts/publish-release.py',
-    [string]$Python='python',
+    [string]$Python=$(if($env:CLIPSHOT_PYTHON){$env:CLIPSHOT_PYTHON}else{'python'}),
     [switch]$CheckOnly
 )
 $ErrorActionPreference='Stop'

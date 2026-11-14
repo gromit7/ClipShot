@@ -26,6 +26,7 @@ internal sealed class RegionCaptureWindow : Window
     private readonly CaptureSelectionCursor cursor;
     private InputPointerSource? islandPointerSource;
     private ContentIsland? captureIsland;
+    private InputNonClientPointerSource? nonClientInput;
     private string islandCursorBinding="NotLoaded";
     private readonly nint hwnd,previousProcedure;
     private readonly Native.WndProc cursorProcedure;
@@ -52,6 +53,13 @@ internal sealed class RegionCaptureWindow : Window
         previousProcedure=Native.SetWindowLongPtr(hwnd,-4,System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(cursorProcedure));
         sizeBadge=new Border{Child=dimensions,Padding=new Thickness(9,5,9,5),Background=new SolidColorBrush(Windows.UI.Color.FromArgb(245,24,24,24)),BorderBrush=new SolidColorBrush(Microsoft.UI.Colors.White),BorderThickness=new Thickness(1),CornerRadius=new CornerRadius(4),Visibility=Visibility.Collapsed};
         var presenter=OverlappedPresenter.Create();presenter.SetBorderAndTitleBar(false,false);presenter.IsResizable=false;presenter.IsMaximizable=false;presenter.IsMinimizable=false;presenter.IsAlwaysOnTop=true;AppWindow.SetPresenter(presenter);AppWindow.IsShownInSwitchers=false;
+        // Remove the native non-client frame as well as the visible title bar.
+        // https://learn.microsoft.com/windows/win32/winmsg/wm-nccalcsize
+        long style=(long)Native.GetWindowLongPtr(hwnd,-16);
+        Native.SetWindowLongPtr(hwnd,-16,(nint)((style&~0x00CF0000L)|0x80000000L));
+        uint square=1,noBorder=0xFFFFFFFE;
+        Native.DwmSetWindowAttribute(hwnd,33,ref square,4);Native.DwmSetWindowAttribute(hwnd,34,ref noBorder,4);
+        Native.SetWindowPos(hwnd,0,frame.X,frame.Y,frame.Width,frame.Height,0x0034);
         AppWindow.MoveAndResize(new RectInt32(frame.X,frame.Y,frame.Width,frame.Height));
         var bitmap=new WriteableBitmap(frame.Width,frame.Height);using(var stream=bitmap.PixelBuffer.AsStream())stream.Write(frame.Pixels);bitmap.Invalidate();background.Source=bitmap;clear.Source=bitmap;clear.Clip=clip;
         surface.Children.Add(background);surface.Children.Add(new Border{Background=new SolidColorBrush(Windows.UI.Color.FromArgb(165,0,0,0))});surface.Children.Add(clear);
@@ -62,6 +70,10 @@ internal sealed class RegionCaptureWindow : Window
         surface.Loaded+=(_,_)=>
         {
             if(finished)return;
+            // Also clear WinAppSDK's separate non-client input sink, not only HWND styles.
+            nonClientInput=InputNonClientPointerSource.GetForWindowId(AppWindow.Id);
+            nonClientInput.ClearAllRegionRects();
+            nonClientInput.SetRegionRects(NonClientRegionKind.Passthrough,[new RectInt32(0,0,frame.Width,frame.Height)]);
             // Configure XAML only after it has a live input site. Native SetCursor
             // changes this UI thread's cursor, not the island's input-thread cursor.
             surface.SetSelectionCursor(null);surface.SetSelectionCursor(cursor.XamlCursor);
@@ -169,7 +181,24 @@ internal sealed class RegionCaptureWindow : Window
     internal string TestCursorDiagnostics=>$"HasSelectionCursor={HasSelectionCursor}; PointerInsideClient={TestPointerInsideClient}; OwnsPointer={TestOwnsPointer}; IslandCursorBinding={islandCursorBinding}; {cursor.Diagnostics}; {CaptureSelectionCursor.OwnershipDiagnostics(hwnd)}";
     private nint CursorMessage(nint window,uint message,nint w,nint l)
     {
+        if(message==0x0083)return 0; // WM_NCCALCSIZE: the entire window is client area.
+        if(message==0x0084&&!finished)return 1; // WM_NCHITTEST: no resize/drag border.
         if(message==0x20&&!finished){cursor.Apply();return 1;}
         return Native.CallWindowProc(previousProcedure,window,message,w,l);
+    }
+    internal void CheckClientEdges()
+    {
+        var regions=nonClientInput?.GetRegionRects(NonClientRegionKind.Passthrough);
+        if(regions is not{Length:1}||regions[0].X!=0||regions[0].Y!=0||regions[0].Width!=frame.Width||regions[0].Height!=frame.Height)
+            throw new InvalidOperationException("Capture input sink does not pass the full surface to XAML");
+        if(!Native.GetWindowRect(hwnd,out var outer)||!Native.GetClientRect(hwnd,out var inner))throw new InvalidOperationException("Capture geometry unavailable");
+        var origin=new Native.Point();if(!Native.ClientToScreen(hwnd,ref origin))throw new InvalidOperationException("Capture origin unavailable");
+        if(origin.X!=frame.X||origin.Y!=frame.Y||outer.Left!=frame.X||outer.Top!=frame.Y||inner.Right!=frame.Width||inner.Bottom!=frame.Height||outer.Right-outer.Left!=frame.Width||outer.Bottom-outer.Top!=frame.Height)
+            throw new InvalidOperationException("Native capture frame reduces or shifts the client area");
+        foreach(var point in new[]{(0,0),(frame.Width/2,0),(frame.Width-1,0),(0,frame.Height/2),(frame.Width-1,frame.Height/2),(0,frame.Height-1),(frame.Width/2,frame.Height-1),(frame.Width-1,frame.Height-1)})
+        {
+            long packed=(ushort)(frame.X+point.Item1)|((long)(ushort)(frame.Y+point.Item2)<<16);
+            if(Native.SendMessage(hwnd,0x0084,0,(nint)packed)!=1)throw new InvalidOperationException("Capture edge consumes client input");
+        }
     }
 }

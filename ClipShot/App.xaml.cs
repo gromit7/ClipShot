@@ -40,6 +40,7 @@ public partial class App : Application
         }
         if(command.Contains("--toggle-microphone"))Native.PostMessage((nint)0xffff,MicrophoneMessage,0,0);
         if (Environment.GetCommandLineArgs().Contains("--background")) window.AppWindow.Hide();
+        else if(isolated&&command.Contains("--passive-preview"))window.AppWindow.Show(false);
         else window.ShowNearCursor();
     }
 }

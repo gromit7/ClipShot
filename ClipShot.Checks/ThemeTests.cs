@@ -10,6 +10,7 @@ public sealed class ThemeTests
     {
         var t=AppThemes.Resolve(id);Assert.Equal(id,t.Id);
         foreach(string color in new[]{t.Window,t.Header,t.Search,t.Separator,t.Selection,t.Secondary,t.Primary,t.SelectedText,t.Title})Assert.Matches("^#([0-9A-F]{6}|[0-9A-F]{8})$",color);
+        Assert.True(Contrast(t.Secondary,t.Window)>=4.5,"Secondary text on content");Assert.True(Contrast(t.Secondary,t.Search)>=4.5,"Secondary text on search");Assert.True(Contrast(t.Primary,t.Window)>=4.5,"Main text on content");
         Assert.True(Contrast(t.Primary,t.Search)>=4.5,"Main text contrast");Assert.True(Contrast(t.SelectedText,t.Selection)>=4.5,"Selected text contrast");Assert.True(Contrast(t.Title,t.Header)>=4.5,"Title contrast");
     }
     [Fact] public void Old_light_setting_migrates_to_white()=>Assert.Equal("White",AppThemes.Resolve("Light").Id);

@@ -1,4 +1,4 @@
-﻿param([string]$MakeNsis,[switch]$SkipBuild,[switch]$SkipDesktop,[switch]$PublishInstaller)
+param([string]$MakeNsis,[switch]$SkipBuild,[switch]$SkipDesktop,[switch]$PublishInstaller)
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'TestWorkspace.ps1')
 $fixtureScope=New-ClipShotTestScope
@@ -24,7 +24,7 @@ function Process-Checked([string]$File,[string]$Arguments,[int]$Timeout=45000,[i
 $oldTestRoot=$env:CLIPSHOT_TEST_ROOT
 try{
     Step 'Test workspace cleanup and parallel isolation' {& (Join-Path $PSScriptRoot 'Test-TestWorkspace.ps1')}
-    Step 'Catalog post-release boundary' {& (Join-Path $PSScriptRoot 'Test-CatalogPublication.ps1')}
+    Step 'Catalog post-release boundary' {& (Join-Path $PSScriptRoot 'Test-CatalogPublication.ps1');& (Join-Path $PSScriptRoot 'Test-CatalogDigest.ps1')}
     if(-not $SkipBuild){Step 'Build, unit tests and publish' {& (Join-Path $PSScriptRoot 'Build.ps1') -Test -Publish}}
     $publication=Join-Path $repo 'ClipShot-app'
     $app=Join-Path $publication 'ClipShot.exe'
@@ -47,6 +47,9 @@ try{
             @{Name='ThemeWindows98';Args='--smoke-test --theme=Windows98';Report='ui-ok.txt';Theme='Windows98'},
             @{Name='ThemeWindowsXP';Args='--smoke-test --theme=WindowsXP';Report='ui-ok.txt';Theme='WindowsXP'},
             @{Name='ThemeCatPink';Args='--smoke-test --theme=CatPink';Report='ui-ok.txt';Theme='CatPink'},
+            @{Name='ThemeWarmLight';Args='--smoke-test --theme=WarmLight';Report='ui-ok.txt';Theme='WarmLight'},
+            @{Name='ThemeNightBlue';Args='--smoke-test --theme=NightBlue';Report='ui-ok.txt';Theme='NightBlue'},
+            @{Name='ThemeMintLight';Args='--smoke-test --theme=MintLight';Report='ui-ok.txt';Theme='MintLight'},
             @{Name='Search, templates, clear, focus and themes';Args='--interaction-self-test';Report='interaction-checks.txt'},
             @{Name='Synthetic selection, PNG and cancel';Args='--capture-self-test';Report='capture-checks.txt'}
             @{Name='Screenshot editor, arrows and export';Args='--editor-self-test';Report='editor-checks.txt'}

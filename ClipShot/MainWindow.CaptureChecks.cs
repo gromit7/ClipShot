@@ -40,6 +40,7 @@ public sealed partial class MainWindow
             // Check the first loaded surface, not an HWND whose XAML input site
             // has not been created yet. No pointer movement or cursor test repair.
             await window.TestSurfaceReady.WaitAsync(TimeSpan.FromSeconds(2));
+            window.CheckClientEdges();
             CursorCheck(window,"Capture cursor was not installed before mouse movement");
             if(!interactive)
             {
@@ -61,9 +62,9 @@ public sealed partial class MainWindow
             var cancelWindow=new RegionCaptureWindow(source,true);var cancel=cancelWindow.SelectAsync();
             await cancelWindow.TestSurfaceReady.WaitAsync(TimeSpan.FromSeconds(2));await Task.Delay(100);
             CursorCheck(cancelWindow,"Repeated capture did not install its cursor");
-            cancelWindow.Cancel();if(await cancel is not null)throw new InvalidOperationException("Cancel mismatch");
+            cancelWindow.CheckClientEdges();cancelWindow.Cancel();if(await cancel is not null)throw new InvalidOperationException("Cancel mismatch");
             if(previousCursor!=0&&CaptureSelectionCursor.CurrentHandle!=previousCursor)throw new InvalidOperationException("Cancelled capture did not restore its previous cursor");
-            File.WriteAllText(report,$"PASS PerMonitorV2 capture thread; window DPI={Native.GetDpiForWindow(hwnd)}; selection {selection.Width}x{selection.Height}; immediate stationary native/XAML crosshair; cursor preserved during drawing; cursor restored after completion and cancel; PNG roundtrip; history; no desktop or clipboard access");
+            File.WriteAllText(report,$"PASS full client area and eight native edges; PerMonitorV2 capture thread; window DPI={Native.GetDpiForWindow(hwnd)}; selection {selection.Width}x{selection.Height}; immediate stationary native/XAML crosshair; cursor preserved during drawing; cursor restored after completion and cancel; PNG roundtrip; history; no desktop or clipboard access");
         }
         catch(Exception e){Environment.ExitCode=1;File.WriteAllText(report,$"FAIL {e.GetType().Name}: {e.Message}");}
         Quit();

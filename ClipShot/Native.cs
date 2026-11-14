@@ -2,6 +2,10 @@ using System.Runtime.InteropServices;
 namespace ClipShot;
 internal static class Native
 {
+    [DllImport("user32.dll")] internal static extern bool GetClientRect(nint window,out Rect rect);
+    [DllImport("user32.dll")] internal static extern bool GetWindowRect(nint window,out Rect rect);
+    [DllImport("dwmapi.dll")] internal static extern int DwmSetWindowAttribute(nint window,int attribute,ref uint value,int size);
+    [StructLayout(LayoutKind.Sequential)] internal struct Rect { public int Left,Top,Right,Bottom; }
     [DllImport("user32.dll")]internal static extern bool ReleaseCapture();
     [DllImport("user32.dll")]internal static extern nint SendMessage(nint window,uint message,nint w,nint l);
     [DllImport("user32.dll")]internal static extern bool ClientToScreen(nint window,ref Point point);

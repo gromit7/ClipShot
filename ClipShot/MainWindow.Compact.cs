@@ -118,6 +118,7 @@ public sealed partial class MainWindow
     }
     private void TrackMenu(MenuFlyout menu)
     {
+        menu.MenuFlyoutPresenterStyle=ThemeFlyoutStyle();
         menu.Opened+=(_,_)=>{openMenus++;CancelPanelFade();};
         menu.Closed+=(_,_)=>openMenus=Math.Max(0,openMenus-1);
     }

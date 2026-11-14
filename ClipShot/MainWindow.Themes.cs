@@ -22,12 +22,15 @@ public sealed partial class MainWindow
             Set("ClipSeparatorBrush",activeTheme.Separator);Set("ClipSelectionBrush",activeTheme.Selection);Set("ClipSecondaryBrush",activeTheme.Secondary);Set("ClipIndicatorBrush",activeTheme.SelectedText);
         }
         SystemBackdrop=activeTheme.Acrylic?new DesktopAcrylicBackdrop():null;
+        SetThemeResources();
         Search.Foreground=primaryBrush;Search.FontFamily=new FontFamily(activeTheme.Font);Search.CornerRadius=new CornerRadius(activeTheme.Corner);
+        ManualUpdateLink.Foreground=primaryBrush;Status.Foreground=primaryBrush;
         Search.BorderThickness=new Thickness(0);
         TitleText.FontFamily=new FontFamily(activeTheme.Font);TitleText.Foreground=titleBrush;SettingsButton.Foreground=titleBrush;HelpButton.Foreground=titleBrush;
         PaintText(FooterSurface,primaryBrush);
         StyleTitleBar();
         ApplyCatTheme();
+        ConfigureWindowContextMenu();ApplyThemedControls(Root);
     }
     private void StyleTitleBar()
     {
@@ -50,7 +53,8 @@ public sealed partial class MainWindow
     {
         if(root is TextBlock text){text.Tag??=text.ReadLocalValue(TextBlock.ForegroundProperty)==DependencyProperty.UnsetValue?primaryBrush:text.Foreground;text.Foreground=selectedRow?selectedTextBrush:(Brush)text.Tag;text.FontFamily=new FontFamily(activeTheme.Font);}
         if(root is FontIcon icon){icon.Tag??=icon.Foreground;icon.Foreground=selectedRow?selectedTextBrush:(Brush)icon.Tag;}
-        for(int i=0;i<VisualTreeHelper.GetChildrenCount(root);i++)StyleRow(VisualTreeHelper.GetChild(root,i),selectedRow);
+        var children=LogicalChildren(root).Concat(Enumerable.Range(0,VisualTreeHelper.GetChildrenCount(root)).Select(i=>VisualTreeHelper.GetChild(root,i))).Distinct();
+        foreach(var child in children)StyleRow(child,selectedRow);
     }
     private static Color ThemeColor(string value)
     {
